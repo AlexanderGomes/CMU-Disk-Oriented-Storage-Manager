@@ -6,7 +6,7 @@ import (
 
 const MaxPoolSize = 50
 
-type PageID int
+type PageID int64
 type Page struct {
 	ID       PageID
 	Data     []byte
@@ -30,17 +30,33 @@ func (bpm *BufferPoolManager) NewPage(pageID PageID, data []byte) *Page {
 	}
 }
 
-func (bpm *BufferPoolManager) FetchPage(pageID PageID) *Page {
+func (bpm *BufferPoolManager) DeletePage(pageID PageID) error {
+	if frameID, ok := bpm.pageTable[pageID]; ok {
+		page := bpm.pages[frameID]
+		if page.IsPinned {
+			return errors.New("Page is pinned, cannot delete")
+		}
+		delete(bpm.pageTable, pageID)
+		bpm.pages[frameID] = nil
+		return nil
+	}
+	return errors.New("Page not found")
+}
+
+func (bpm *BufferPoolManager) FetchPage(pageID PageID) (*Page, error) {
 	var page Page
 	//# buffer hit
 	if frameID, ok := bpm.pageTable[pageID]; ok {
 		page = *bpm.pages[frameID]
+		if page.IsPinned {
+			return nil, errors.New("Page is pinned, cannot access")
+		}
 		bpm.Pin(pageID)
-		return &page
+		return &page, nil
 	}
 
 	//#disk read
-	return &page
+	return &page, nil
 }
 
 func (bpm *BufferPoolManager) Unpin(pageID PageID, isDirty bool) error {
@@ -48,6 +64,7 @@ func (bpm *BufferPoolManager) Unpin(pageID PageID, isDirty bool) error {
 		page := bpm.pages[FrameID]
 		page.IsDirty = isDirty
 		page.IsPinned = false
+		return nil
 	}
 
 	return errors.New("Page Not Found")
@@ -58,6 +75,8 @@ func (bpm *BufferPoolManager) Pin(pageID PageID) error {
 		page := bpm.pages[FrameID]
 		page.IsPinned = true
 		// #replacemet policy
+
+		return nil
 	}
 
 	return errors.New("Page Not Found")
@@ -76,6 +95,4 @@ func NewBufferPoolManager() *BufferPoolManager {
 }
 
 // FlushPage(page_id_t page_id) //check if it's pinned
-// NewPage(page_id_t* page_id)
-// DeletePage(page_id_t page_id) //check if it's pinned
 // FlushAllPages() //check if it's pinned
