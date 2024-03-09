@@ -13,5 +13,5 @@ func main() {
 		log.Println(err)
 	}
 
-	fmt.Println(diskPtr.DirectoryPage)
+	fmt.Println(diskPtr)
 }

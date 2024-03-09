@@ -61,10 +61,6 @@ func (dm *DiskManager) loadOrCreateDirectoryPage() error {
 }
 
 func (dm *DiskManager) createDirectoryPage() error {
-	dm.DirectoryPage = DirectoryPage{
-		Mapping: make(map[PageID]Offset),
-	}
-
 	dirPageBytes, err := encodeDirectoryPage(dm.DirectoryPage)
 	if err != nil {
 		return err
@@ -75,7 +71,13 @@ func (dm *DiskManager) createDirectoryPage() error {
 		return err
 	}
 
+	// header is not being updated propertly
 	if err := dm.updateHeader(pageLocation); err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(dirPageBytes, &dm.DirectoryPage)
+	if err != nil {
 		return err
 	}
 
@@ -88,7 +90,6 @@ func (dm *DiskManager) readHeader() (Offset, error) {
 	if err != nil {
 		return 0, err
 	}
-
 	isDefaultHeader := true
 	for _, b := range headerBytes {
 		if b != 0 {
