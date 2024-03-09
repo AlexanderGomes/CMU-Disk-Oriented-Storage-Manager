@@ -3,19 +3,19 @@ package buffer
 import (
 	"encoding/binary"
 	"encoding/json"
-	"errors"
+	"io"
 	"os"
 )
 
 type Offset int64
 type DirectoryPage struct {
-	mapping map[PageID]Offset
+	Mapping map[PageID]Offset
 }
 
 type DiskManager struct {
-	file          *os.File
-	directoryPage DirectoryPage
-	headerSize    int64 // Size of the header in bytes
+	File          *os.File
+	DirectoryPage DirectoryPage
+	HeaderSize    int64 // Size in bytes
 }
 
 func NewDiskManager(filename string, headerSize int64) (*DiskManager, error) {
@@ -25,11 +25,10 @@ func NewDiskManager(filename string, headerSize int64) (*DiskManager, error) {
 	}
 
 	dm := &DiskManager{
-		file:       file,
-		headerSize: headerSize,
+		File:       file,
+		HeaderSize: headerSize,
 	}
 
-	// Load directory page from file
 	if err := dm.loadOrCreateDirectoryPage(); err != nil {
 		return nil, err
 	}
@@ -38,72 +37,116 @@ func NewDiskManager(filename string, headerSize int64) (*DiskManager, error) {
 }
 
 func (dm *DiskManager) loadOrCreateDirectoryPage() error {
-	// // Check if the directory page exists in the header
-	// directoryPageOffset, err := dm.readDirectoryPageOffset()
-	// if err != nil {
-	// 	return err
-	// }
+	directoryPageOffset, err := dm.readDirectoryPageOffset()
+	if err != nil {
+		return err
+	}
+
+	if directoryPageOffset == 0 {
+		if err := dm.createDirectoryPage(); err != nil {
+			return err
+		}
+	} else {
+		if err := dm.LoadDirectoryPage(directoryPageOffset); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (dm *DiskManager) LoadDirectoryPage(offset Offset) error {
+	_, err := dm.File.Seek(int64(offset), io.SeekStart)
+	if err != nil {
+		return err
+	}
+
+	dirPageBytes := make([]byte, PageSize)
+	_, err = dm.File.Read(dirPageBytes)
+	if err != nil {
+		return err
+	}
+
+	// Decode the directory page bytes into the directoryPage field of DiskManager
+	err = json.Unmarshal(dirPageBytes, &dm.DirectoryPage)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
 func (dm *DiskManager) readDirectoryPageOffset() (Offset, error) {
-	headerBytes := make([]byte, dm.headerSize)
-	if _, err := dm.file.ReadAt(headerBytes, 0); err != nil {
+	headerBytes := make([]byte, dm.HeaderSize)
+	if _, err := dm.File.ReadAt(headerBytes, 0); err != nil {
 		return 0, err
 	}
 
-	// Check if headerBytes is empty
-	isEmpty := true
-	for _, b := range headerBytes {
-		if b != 0 {
-			isEmpty = false
-			break
-		}
-	}
+	offsetBytes := headerBytes[:8]
 
-	if isEmpty {
-		dm.createDirectoryPage()
-	} else {
-		// Directory page exists, load it from file
-		// if err := dm.loadDirectoryPage(directoryPageOffset); err != nil {
-		// 	return err
-		// }
-	}
-
-	// offsetValue := binary.BigEndian.Uint64(headerBytes[0:8])
-	// return Offset(offsetValue), nil
+	offset := Offset(binary.BigEndian.Uint64(offsetBytes))
+	return offset, nil
 }
 
-func (dm *DiskManager) createDirectoryPage() {
-	dm.directoryPage = DirectoryPage{
-		mapping: make(map[PageID]Offset),
+func (dm *DiskManager) createDirectoryPage() error {
+	dm.DirectoryPage = DirectoryPage{
+		Mapping: make(map[PageID]Offset),
 	}
 
-	// Encode the directory page into a byte slice
-	dirPageBytes, err := encodeDirectoryPage(dm.directoryPage)
+	dirPageBytes, err := encodeDirectoryPage(dm.DirectoryPage)
 	if err != nil {
 		return err
 	}
 
-	// Write the directory page to the file after the header
-	pageLocation, err := dm.writePageToFile(dirPageBytes)
+	pageLocation, err := dm.writePageToFile(dirPageBytes);
 	if err != nil {
 		return err
 	}
 
-	// Update the header with the page location
 	if err := dm.updateHeader(pageLocation); err != nil {
 		return err
 	}
 
+	if err := dm.LoadDirectoryPage(pageLocation); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (dm *DiskManager) updateHeader(offset Offset) error {
+	headerBytes := make([]byte, dm.HeaderSize)
+	if _, err := dm.File.ReadAt(headerBytes, 0); err != nil {
+		return err
+	}
+
+	offsetBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(offsetBytes, uint64(offset))
+
+	copy(headerBytes, offsetBytes)
+
+	_, err := dm.File.WriteAt(headerBytes, 0)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (dm *DiskManager) writePageToFile(pageBytes []byte) (Offset, error) {
+	offset := dm.HeaderSize + 1
+	_, err := dm.File.WriteAt(pageBytes, offset)
+	if err != nil {
+		return 0, err
+	}
+
+	return Offset(offset), nil
 }
 
 func encodeDirectoryPage(page DirectoryPage) ([]byte, error) {
-	// Serialize the DirectoryPage struct into a byte slice using JSON encoding
 	encoded, err := json.Marshal(page)
 	if err != nil {
-		return nil, err // Return serialization error
+		return nil, err
 	}
 	return encoded, nil
 }

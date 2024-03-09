@@ -5,6 +5,7 @@ import (
 )
 
 const MaxPoolSize = 50
+const PageSize = 4096
 
 type PageID int64
 type Page struct {
