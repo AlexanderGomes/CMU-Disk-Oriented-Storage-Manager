@@ -14,8 +14,8 @@ type DirectoryPage struct {
 
 type DiskManager struct {
 	File          *os.File
-	DirectoryPage DirectoryPage
-	HeaderSize    int64 // Size in bytes
+	DirectoryPage DirectoryPage // add to buffer pool
+	HeaderSize    int64
 }
 
 func NewDiskManager(filename string, headerSize int64) (*DiskManager, error) {
@@ -71,7 +71,6 @@ func (dm *DiskManager) createDirectoryPage() error {
 		return err
 	}
 
-	// header is not being updated propertly
 	if err := dm.updateHeader(pageLocation); err != nil {
 		return err
 	}
@@ -147,7 +146,17 @@ func (dm *DiskManager) LoadDirectoryPage(offset Offset) error {
 		return err
 	}
 
-	err = json.Unmarshal(dirPageBytes, &dm.DirectoryPage)
+	// TODO: int64 is too big for the offset, 7 bytes are empty
+	// we need to loop through 7 * 8 to check when the page ends => 1 byte
+	endIndex := 0
+	for i, b := range dirPageBytes {
+		if b == 0 {
+			endIndex = i
+			break
+		}
+	}
+
+	err = json.Unmarshal(dirPageBytes[:endIndex], &dm.DirectoryPage)
 	if err != nil {
 		return err
 	}
@@ -155,9 +164,8 @@ func (dm *DiskManager) LoadDirectoryPage(offset Offset) error {
 	return nil
 }
 
-// TASK : debug this
 func (dm *DiskManager) updateHeader(offset Offset) error {
-	offsetBytes := make([]byte, 8)
+	offsetBytes := make([]byte, dm.HeaderSize)
 	binary.BigEndian.PutUint64(offsetBytes, uint64(offset))
 
 	headerBytes := make([]byte, dm.HeaderSize)
@@ -165,7 +173,7 @@ func (dm *DiskManager) updateHeader(offset Offset) error {
 		return err
 	}
 
-	copy(headerBytes[dm.HeaderSize:], offsetBytes)
+	copy(headerBytes[:dm.HeaderSize], offsetBytes)
 
 	_, err := dm.File.WriteAt(headerBytes, 0)
 	if err != nil {

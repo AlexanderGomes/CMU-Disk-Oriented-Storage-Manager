@@ -6,12 +6,12 @@ import (
 	"log"
 )
 
-const HeaderSize = 8
+const HeaderSize = 8 //!bytes < 8
 func main() {
 	diskPtr, err := buffer.NewDiskManager("database1", HeaderSize)
 	if err != nil {
 		log.Println(err)
 	}
 
-	fmt.Println(diskPtr)
+	fmt.Println(diskPtr.DirectoryPage)
 }
