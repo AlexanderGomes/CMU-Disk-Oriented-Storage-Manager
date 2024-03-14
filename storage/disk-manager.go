@@ -1,4 +1,4 @@
-package buffer
+package storage
 
 import (
 	"encoding/binary"
@@ -7,6 +7,8 @@ import (
 	"os"
 )
 
+const PageSize = 4096
+
 type Offset int64
 type DirectoryPage struct {
 	Mapping map[PageID]Offset
@@ -14,8 +16,9 @@ type DirectoryPage struct {
 
 type DiskManager struct {
 	File          *os.File
-	DirectoryPage DirectoryPage // add to buffer pool
+	DirectoryPage DirectoryPage
 	HeaderSize    int64
+	Scheduler     *DiskScheduler
 }
 
 func NewDiskManager(filename string, headerSize int64) (*DiskManager, error) {
@@ -48,18 +51,13 @@ func (dm *DiskManager) loadOrCreateDirectoryPage() error {
 	}
 
 	if directoryPageOffset == 0 {
-		if err := dm.createDirectoryPage(); err != nil {
-			return err
-		}
-	} else {
-		if err := dm.LoadDirectoryPage(directoryPageOffset); err != nil {
-			return err
-		}
+		return dm.createDirectoryPage()
 	}
 
-	return nil
+	return dm.LoadDirectoryPage(directoryPageOffset)
 }
 
+// write 2/4kb of page limit
 func (dm *DiskManager) createDirectoryPage() error {
 	dirPageBytes, err := encodeDirectoryPage(dm.DirectoryPage)
 	if err != nil {
@@ -83,28 +81,28 @@ func (dm *DiskManager) createDirectoryPage() error {
 	return nil
 }
 
-func (dm *DiskManager) readHeader() (Offset, error) {
-	headerBytes := make([]byte, dm.HeaderSize)
-	_, err := dm.File.ReadAt(headerBytes, 0)
+func (dm *DiskManager) writePageToFile(pageBytes []byte) (Offset, error) {
+	offset := dm.HeaderSize
+	_, err := dm.File.WriteAt(pageBytes, offset)
 	if err != nil {
 		return 0, err
 	}
-	isDefaultHeader := true
+
+	return Offset(offset), nil
+}
+
+func (dm *DiskManager) readHeader() (Offset, error) {
+	headerBytes := make([]byte, dm.HeaderSize)
+	if _, err := dm.File.ReadAt(headerBytes, 0); err != nil {
+		return 0, err
+	}
+
 	for _, b := range headerBytes {
 		if b != 0 {
-			isDefaultHeader = false
-			break
+			return Offset(binary.BigEndian.Uint64(headerBytes[:8])), nil
 		}
 	}
-
-	if isDefaultHeader {
-		return 0, nil
-	}
-
-	offsetBytes := headerBytes[:8]
-	offset := Offset(binary.BigEndian.Uint64(offsetBytes))
-
-	return offset, nil
+	return 0, nil
 }
 
 func (dm *DiskManager) SetDefaultHeader() error {
@@ -141,13 +139,12 @@ func (dm *DiskManager) LoadDirectoryPage(offset Offset) error {
 	}
 
 	dirPageBytes := make([]byte, PageSize)
+	//send to disk scheduler
 	_, err = dm.File.Read(dirPageBytes)
 	if err != nil {
 		return err
 	}
 
-	// TODO: int64 is too big for the offset, 7 bytes are empty
-	// we need to loop through 7 * 8 to check when the page ends => 1 byte
 	endIndex := 0
 	for i, b := range dirPageBytes {
 		if b == 0 {
@@ -169,28 +166,20 @@ func (dm *DiskManager) updateHeader(offset Offset) error {
 	binary.BigEndian.PutUint64(offsetBytes, uint64(offset))
 
 	headerBytes := make([]byte, dm.HeaderSize)
+	// send to disk scheduler
 	if _, err := dm.File.ReadAt(headerBytes, 0); err != nil {
 		return err
 	}
 
 	copy(headerBytes[:dm.HeaderSize], offsetBytes)
 
+	// send to disk scheduler
 	_, err := dm.File.WriteAt(headerBytes, 0)
 	if err != nil {
 		return err
 	}
 
 	return nil
-}
-
-func (dm *DiskManager) writePageToFile(pageBytes []byte) (Offset, error) {
-	offset := dm.HeaderSize
-	_, err := dm.File.WriteAt(pageBytes, offset)
-	if err != nil {
-		return 0, err
-	}
-
-	return Offset(offset), nil
 }
 
 func encodeDirectoryPage(page DirectoryPage) ([]byte, error) {

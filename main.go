@@ -1,14 +1,16 @@
 package main
 
 import (
-	"disk-db/buffer"
+	"disk-db/storage"
 	"fmt"
 	"log"
 )
 
-const HeaderSize = 8 //!bytes < 8
+const HeaderSize = 8
+
 func main() {
-	diskPtr, err := buffer.NewDiskManager("database1", HeaderSize)
+
+	diskPtr, err := storage.NewDiskManager("db-file", HeaderSize)
 	if err != nil {
 		log.Println(err)
 	}

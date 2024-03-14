@@ -1,16 +1,15 @@
-package buffer
+package storage
 
 import (
 	"errors"
 )
 
 const MaxPoolSize = 50
-const PageSize = 4096
 
 type PageID int64
 type Page struct {
 	ID       PageID
-	Data     []byte
+	Data     [][]byte
 	IsDirty  bool
 	IsPinned bool
 }
@@ -20,15 +19,6 @@ type BufferPoolManager struct {
 	pages     [MaxPoolSize]*Page
 	freeList  []FrameID
 	pageTable map[PageID]FrameID
-}
-
-func (bpm *BufferPoolManager) NewPage(pageID PageID, data []byte) *Page {
-	return &Page{
-		ID:       pageID,
-		Data:     data,
-		IsDirty:  false,
-		IsPinned: false,
-	}
 }
 
 func (bpm *BufferPoolManager) DeletePage(pageID PageID) error {
