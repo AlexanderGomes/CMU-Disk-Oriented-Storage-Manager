@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-const PageSize = 4096
+const PageSize = 2096
 
 type Offset int64
 type DirectoryPage struct {
@@ -31,6 +31,8 @@ func NewDiskManager(filename string, headerSize int64) (*DiskManager, error) {
 		File:       file,
 		HeaderSize: headerSize,
 	}
+
+	dm.Scheduler = NewDiskScheduler(dm)
 
 	err = dm.SetDefaultHeader()
 	if err != nil {
@@ -57,9 +59,14 @@ func (dm *DiskManager) loadOrCreateDirectoryPage() error {
 	return dm.LoadDirectoryPage(directoryPageOffset)
 }
 
-// write 2/4kb of page limit
 func (dm *DiskManager) createDirectoryPage() error {
-	dirPageBytes, err := encodeDirectoryPage(dm.DirectoryPage)
+	directoryPage := DirectoryPage{
+		Mapping: make(map[PageID]Offset),
+	}
+
+	dm.DirectoryPage = directoryPage
+
+	dirPageBytes, err := encodeDirectoryPage(directoryPage)
 	if err != nil {
 		return err
 	}
@@ -70,11 +77,6 @@ func (dm *DiskManager) createDirectoryPage() error {
 	}
 
 	if err := dm.updateHeader(pageLocation); err != nil {
-		return err
-	}
-
-	err = json.Unmarshal(dirPageBytes, &dm.DirectoryPage)
-	if err != nil {
 		return err
 	}
 
