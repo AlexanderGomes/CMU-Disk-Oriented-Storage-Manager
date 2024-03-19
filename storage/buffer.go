@@ -21,6 +21,34 @@ type BufferPoolManager struct {
 	pageTable map[PageID]FrameID
 }
 
+func (bpm *BufferPoolManager) CreateAndInsertPage(data [][]byte, ID PageID) error {
+	page := &Page{
+		ID:   ID,
+		Data: data,
+	}
+
+	isAdded := bpm.InsertPage(page)
+	if !isAdded {
+		return errors.New("unable to add page to buffer pool")
+	}
+
+	return nil
+}
+
+func (bpm *BufferPoolManager) InsertPage(page *Page) bool {
+	if len(bpm.freeList) == 0 {
+		return false
+	}
+
+	frameID := bpm.freeList[0]
+	bpm.freeList = bpm.freeList[1:]
+
+	bpm.pages[frameID] = page
+	bpm.pageTable[page.ID] = frameID
+
+	return true
+}
+
 func (bpm *BufferPoolManager) DeletePage(pageID PageID) error {
 	if frameID, ok := bpm.pageTable[pageID]; ok {
 		page := bpm.pages[frameID]
@@ -29,6 +57,7 @@ func (bpm *BufferPoolManager) DeletePage(pageID PageID) error {
 		}
 		delete(bpm.pageTable, pageID)
 		bpm.pages[frameID] = nil
+		bpm.freeList = append(bpm.freeList, frameID)
 		return nil
 	}
 	return errors.New("Page not found")
@@ -36,7 +65,6 @@ func (bpm *BufferPoolManager) DeletePage(pageID PageID) error {
 
 func (bpm *BufferPoolManager) FetchPage(pageID PageID) (*Page, error) {
 	var page Page
-	//# buffer hit
 	if frameID, ok := bpm.pageTable[pageID]; ok {
 		page = *bpm.pages[frameID]
 		if page.IsPinned {
@@ -46,7 +74,6 @@ func (bpm *BufferPoolManager) FetchPage(pageID PageID) (*Page, error) {
 		return &page, nil
 	}
 
-	//#disk read
 	return &page, nil
 }
 
@@ -84,6 +111,3 @@ func NewBufferPoolManager() *BufferPoolManager {
 	pageTable := make(map[PageID]FrameID)
 	return &BufferPoolManager{pages, freeList, pageTable}
 }
-
-// FlushPage(page_id_t page_id) //check if it's pinned
-// FlushAllPages() //check if it's pinned

@@ -15,5 +15,16 @@ func main() {
 		log.Println(err)
 	}
 
+	data := [][]byte{[]byte("ajsabjskj skas as jka skj asj ajk sjk asj")}
+
+	req := storage.DiskReq{
+		Page: storage.Page{
+			ID:   129192912,
+			Data: data,
+		},
+	}
+
+	page, _ := diskPtr.Scheduler.ReadFromDisk(req.Page.ID)
+	fmt.Println(page)
 	fmt.Println(diskPtr.DirectoryPage)
 }
