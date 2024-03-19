@@ -3,11 +3,12 @@ package storage
 import (
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 )
 
-const PageSize = 2096
+const PageSize = 2048
 
 type Offset int64
 type DirectoryPage struct {
@@ -66,12 +67,12 @@ func (dm *DiskManager) createDirectoryPage() error {
 
 	dm.DirectoryPage = directoryPage
 
-	dirPageBytes, err := encodeDirectoryPage(directoryPage)
+	dirPageBytes, err := Encode(directoryPage)
 	if err != nil {
 		return err
 	}
 
-	pageLocation, err := dm.writePageToFile(dirPageBytes)
+	pageLocation, err := dm.WriteDirectoryDisk(dirPageBytes)
 	if err != nil {
 		return err
 	}
@@ -83,11 +84,20 @@ func (dm *DiskManager) createDirectoryPage() error {
 	return nil
 }
 
-func (dm *DiskManager) writePageToFile(pageBytes []byte) (Offset, error) {
+func (dm *DiskManager) WriteDirectoryDisk(pageBytes []byte) (Offset, error) {
 	offset := dm.HeaderSize
-	_, err := dm.File.WriteAt(pageBytes, offset)
+
+	paddingSize := PageSize - len(pageBytes)
+
+	buffer := append(pageBytes, make([]byte, paddingSize)...)
+
+	n, err := dm.File.WriteAt(buffer, int64(offset))
 	if err != nil {
 		return 0, err
+	}
+
+	if n != PageSize {
+		return 0, fmt.Errorf("failed to write entire page to disk")
 	}
 
 	return Offset(offset), nil
@@ -141,7 +151,6 @@ func (dm *DiskManager) LoadDirectoryPage(offset Offset) error {
 	}
 
 	dirPageBytes := make([]byte, PageSize)
-	//send to disk scheduler
 	_, err = dm.File.Read(dirPageBytes)
 	if err != nil {
 		return err
@@ -184,7 +193,7 @@ func (dm *DiskManager) updateHeader(offset Offset) error {
 	return nil
 }
 
-func encodeDirectoryPage(page DirectoryPage) ([]byte, error) {
+func Encode(page interface{}) ([]byte, error) {
 	encoded, err := json.Marshal(page)
 	if err != nil {
 		return nil, err
