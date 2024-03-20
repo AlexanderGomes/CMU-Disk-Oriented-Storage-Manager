@@ -4,7 +4,7 @@ import (
 	"errors"
 )
 
-const MaxPoolSize = 50
+// maybe put it in one place
 
 type PageID int64
 type Page struct {
@@ -14,13 +14,14 @@ type Page struct {
 	IsPinned bool
 }
 
+const MaxPoolSize = 50
 type FrameID int
 type BufferPoolManager struct {
-	pages       [MaxPoolSize]*Page
+	Pages       [MaxPoolSize]*Page
 	freeList    []FrameID
 	pageTable   map[PageID]FrameID
 	replacer    *LRUKReplacer
-	diskManager DiskManager
+	diskManager *DiskManager // maybe use a pointer
 }
 
 func (bpm *BufferPoolManager) CreateAndInsertPage(data [][]byte, ID PageID) error {
@@ -45,28 +46,25 @@ func (bpm *BufferPoolManager) InsertPage(page *Page) bool {
 	frameID := bpm.freeList[0]
 	bpm.freeList = bpm.freeList[1:]
 
-	bpm.pages[frameID] = page
+	bpm.Pages[frameID] = page
 	bpm.pageTable[page.ID] = frameID
 
 	return true
 }
 
-func (bpm *BufferPoolManager) Evict(pageID PageID) error {
+func (bpm *BufferPoolManager) Evict() error {
 	frameID, err := bpm.replacer.Evict()
 	if err != nil {
 		return err
 	}
-	page := bpm.pages[frameID]
+	page := bpm.Pages[frameID]
 
 	req := DiskReq{
 		Page:      *page,
 		Operation: "WRITE",
 	}
 
-	//# write to disk
 	bpm.diskManager.Scheduler.AddReq(req)
-
-	//# Delete page from buffer pool
 	bpm.DeletePage(page.ID)
 
 	return nil
@@ -74,12 +72,12 @@ func (bpm *BufferPoolManager) Evict(pageID PageID) error {
 
 func (bpm *BufferPoolManager) DeletePage(pageID PageID) (FrameID, error) {
 	if frameID, ok := bpm.pageTable[pageID]; ok {
-		page := bpm.pages[frameID]
+		page := bpm.Pages[frameID]
 		if page.IsPinned {
 			return 0, errors.New("Page is pinned, cannot delete")
 		}
 		delete(bpm.pageTable, pageID)
-		bpm.pages[frameID] = nil
+		bpm.Pages[frameID] = nil
 		bpm.freeList = append(bpm.freeList, frameID)
 		return frameID, nil
 	}
@@ -89,18 +87,26 @@ func (bpm *BufferPoolManager) DeletePage(pageID PageID) (FrameID, error) {
 func (bpm *BufferPoolManager) FetchPage(pageID PageID) (*Page, error) {
 	var page Page
 	if frameID, ok := bpm.pageTable[pageID]; ok {
-		page = *bpm.pages[frameID]
+		page = *bpm.Pages[frameID]
 		if page.IsPinned {
 			return nil, errors.New("Page is pinned, cannot access")
 		}
-		bpm.Pin(pageID)
-		return &page, nil
+		bpm.Pin(page.ID)
 	} else {
 		req := DiskReq{
 			Page:      page,
 			Operation: "READ",
 		}
 		bpm.diskManager.Scheduler.AddReq(req)
+
+		for result := range bpm.diskManager.Scheduler.ResultChan {
+			if result.Page.ID == pageID {
+				bpm.InsertPage(&result.Page)
+				bpm.Pin(result.Page.ID)
+				page = result.Page
+				break
+			}
+		}
 	}
 
 	return &page, nil
@@ -108,7 +114,7 @@ func (bpm *BufferPoolManager) FetchPage(pageID PageID) (*Page, error) {
 
 func (bpm *BufferPoolManager) Unpin(pageID PageID, isDirty bool) error {
 	if FrameID, ok := bpm.pageTable[pageID]; ok {
-		page := bpm.pages[FrameID]
+		page := bpm.Pages[FrameID]
 		page.IsDirty = isDirty
 		page.IsPinned = false
 		return nil
@@ -119,7 +125,7 @@ func (bpm *BufferPoolManager) Unpin(pageID PageID, isDirty bool) error {
 
 func (bpm *BufferPoolManager) Pin(pageID PageID) error {
 	if FrameID, ok := bpm.pageTable[pageID]; ok {
-		page := bpm.pages[FrameID]
+		page := bpm.Pages[FrameID]
 		page.IsPinned = true
 
 		bpm.replacer.RecordAccess(FrameID)
@@ -130,15 +136,20 @@ func (bpm *BufferPoolManager) Pin(pageID PageID) error {
 	return errors.New("Page Not Found")
 }
 
-func NewBufferPoolManager(diskManager DiskManager) *BufferPoolManager {
+func NewBufferPoolManager(k int, fileName string, headerSize int) (*BufferPoolManager, error) {
 	freeList := make([]FrameID, 0)
 	pages := [MaxPoolSize]*Page{}
 	for i := 0; i < MaxPoolSize; i++ {
 		freeList = append(freeList, FrameID(i))
 		pages[FrameID(i)] = nil
 	}
+    pageTable := make(map[PageID]FrameID)
+	
+	replacer := NewLRUKReplacer(k)
+	diskManager, err := NewDiskManager(fileName, int64(headerSize))
+	if err != nil {
+		return nil, err
+	}
 
-	pageTable := make(map[PageID]FrameID)
-	replacer := NewLRUKReplacer(2)
-	return &BufferPoolManager{pages, freeList, pageTable, replacer, diskManager}
+	return &BufferPoolManager{pages, freeList, pageTable, replacer, diskManager}, nil
 }

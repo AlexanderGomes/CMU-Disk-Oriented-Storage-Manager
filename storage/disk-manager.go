@@ -17,7 +17,7 @@ type DirectoryPage struct {
 
 type DiskManager struct {
 	File          *os.File
-	DirectoryPage DirectoryPage
+	DirectoryPage DirectoryPage // maybe use a pointer
 	HeaderSize    int64
 	Scheduler     *DiskScheduler
 }

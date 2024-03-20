@@ -46,7 +46,7 @@ func (r *LRUKReplacer) Evict() (FrameID, error) {
 	}
 
 	maxDistance := -1
-	maxFrequency := -1
+	minFrequency := math.MaxInt64
 	var evictedFrameID FrameID
 	for frameID := range r.frameToElem {
 		distance, err := r.computeBackwardKDistance(frameID)
@@ -57,9 +57,9 @@ func (r *LRUKReplacer) Evict() (FrameID, error) {
 		elem := r.frameToElem[frameID]
 		accessEntry := elem.Value.(*AccessEntry)
 
-		if (distance > maxDistance) || (distance == maxDistance && accessEntry.Frequency > maxFrequency) {
+		if (distance > maxDistance) || (distance == maxDistance && accessEntry.Frequency < minFrequency) {
 			maxDistance = distance
-			maxFrequency = accessEntry.Frequency
+			minFrequency = accessEntry.Frequency
 			evictedFrameID = frameID
 		}
 	}

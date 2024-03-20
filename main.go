@@ -3,28 +3,25 @@ package main
 import (
 	"disk-db/storage"
 	"fmt"
-	"log"
 )
 
-const HeaderSize = 8
+const HeaderSize = 8 // header to find directory page
+const k = 2          // replacement policy
+const fileName = "DB-file"
 
 func main() {
-
-	diskPtr, err := storage.NewDiskManager("db-file", HeaderSize)
+	bufferPool, err := storage.InitDatabase(k, fileName, HeaderSize)
 	if err != nil {
-		log.Println(err)
+		fmt.Println(err)
 	}
+	data1 := [][]byte{[]byte("asasa"), []byte("sasasas")}
+	pageID1 := 129102801221212
+	data2 := [][]byte{[]byte("asasa"), []byte("sasasas")}
+	pageID2 := 129102801221212
+	data3 := [][]byte{[]byte("asasa"), []byte("sasasas")}
+	pageID3 := 129102801221212
 
-	data := [][]byte{[]byte("ajsabjskj skas as jka skj asj ajk sjk asj")}
-
-	req := storage.DiskReq{
-		Page: storage.Page{
-			ID:   129192912,
-			Data: data,
-		},
-	}
-
-	page, _ := diskPtr.Scheduler.ReadFromDisk(req.Page.ID)
-	fmt.Println(page)
-	fmt.Println(diskPtr.DirectoryPage)
+	bufferPool.CreateAndInsertPage(data1, storage.PageID(pageID1))
+	bufferPool.CreateAndInsertPage(data2, storage.PageID(pageID2))
+	bufferPool.CreateAndInsertPage(data3, storage.PageID(pageID3))
 }

@@ -39,7 +39,6 @@ func (ds *DiskScheduler) ProccessReq() {
 			}
 
 			result.Response = nil
-			ds.ResultChan <- result
 		} else {
 			page, err := ds.ReadFromDisk(req.Page.ID)
 			result.Page = page
@@ -48,18 +47,19 @@ func (ds *DiskScheduler) ProccessReq() {
 			}
 
 			result.Response = nil
-			ds.ResultChan <- result
 		}
+		ds.ResultChan <- result
 	}
 }
 
 func (ds *DiskScheduler) ReadFromDisk(ID PageID) (Page, error) {
 	offset := ds.DiskManager.DirectoryPage.Mapping[ID]
 	pageBytes := make([]byte, PageSize)
+	page := Page{}
 
 	_, err := ds.DiskManager.File.ReadAt(pageBytes, int64(offset))
 	if err != nil {
-		return Page{}, err
+		return page, err
 	}
 
 	endIndex := 0
@@ -70,10 +70,9 @@ func (ds *DiskScheduler) ReadFromDisk(ID PageID) (Page, error) {
 		}
 	}
 
-	page := Page{}
 	err = json.Unmarshal(pageBytes[:endIndex], &page)
 	if err != nil {
-		return Page{}, err
+		return page, err
 	}
 
 	return page, nil
