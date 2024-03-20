@@ -114,6 +114,7 @@ func (dm *DiskManager) readHeader() (Offset, error) {
 			return Offset(binary.BigEndian.Uint64(headerBytes[:8])), nil
 		}
 	}
+	
 	return 0, nil
 }
 
@@ -122,6 +123,7 @@ func (dm *DiskManager) SetDefaultHeader() error {
 	if err != nil {
 		return err
 	}
+
 	fileSize := fileInfo.Size()
 
 	if fileSize < dm.HeaderSize {
@@ -177,14 +179,12 @@ func (dm *DiskManager) updateHeader(offset Offset) error {
 	binary.BigEndian.PutUint64(offsetBytes, uint64(offset))
 
 	headerBytes := make([]byte, dm.HeaderSize)
-	// send to disk scheduler
 	if _, err := dm.File.ReadAt(headerBytes, 0); err != nil {
 		return err
 	}
 
 	copy(headerBytes[:dm.HeaderSize], offsetBytes)
 
-	// send to disk scheduler
 	_, err := dm.File.WriteAt(headerBytes, 0)
 	if err != nil {
 		return err

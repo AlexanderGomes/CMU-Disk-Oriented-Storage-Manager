@@ -16,9 +16,11 @@ type Page struct {
 
 type FrameID int
 type BufferPoolManager struct {
-	pages     [MaxPoolSize]*Page
-	freeList  []FrameID
-	pageTable map[PageID]FrameID
+	pages       [MaxPoolSize]*Page
+	freeList    []FrameID
+	pageTable   map[PageID]FrameID
+	replacer    *LRUKReplacer
+	diskManager DiskManager
 }
 
 func (bpm *BufferPoolManager) CreateAndInsertPage(data [][]byte, ID PageID) error {
@@ -49,18 +51,39 @@ func (bpm *BufferPoolManager) InsertPage(page *Page) bool {
 	return true
 }
 
-func (bpm *BufferPoolManager) DeletePage(pageID PageID) error {
+func (bpm *BufferPoolManager) Evict(pageID PageID) error {
+	frameID, err := bpm.replacer.Evict()
+	if err != nil {
+		return err
+	}
+	page := bpm.pages[frameID]
+
+	req := DiskReq{
+		Page:      *page,
+		Operation: "WRITE",
+	}
+
+	//# write to disk
+	bpm.diskManager.Scheduler.AddReq(req)
+
+	//# Delete page from buffer pool
+	bpm.DeletePage(page.ID)
+
+	return nil
+}
+
+func (bpm *BufferPoolManager) DeletePage(pageID PageID) (FrameID, error) {
 	if frameID, ok := bpm.pageTable[pageID]; ok {
 		page := bpm.pages[frameID]
 		if page.IsPinned {
-			return errors.New("Page is pinned, cannot delete")
+			return 0, errors.New("Page is pinned, cannot delete")
 		}
 		delete(bpm.pageTable, pageID)
 		bpm.pages[frameID] = nil
 		bpm.freeList = append(bpm.freeList, frameID)
-		return nil
+		return frameID, nil
 	}
-	return errors.New("Page not found")
+	return 0, errors.New("Page not found")
 }
 
 func (bpm *BufferPoolManager) FetchPage(pageID PageID) (*Page, error) {
@@ -100,7 +123,7 @@ func (bpm *BufferPoolManager) Pin(pageID PageID) error {
 	return errors.New("Page Not Found")
 }
 
-func NewBufferPoolManager() *BufferPoolManager {
+func NewBufferPoolManager(diskManager DiskManager) *BufferPoolManager {
 	freeList := make([]FrameID, 0)
 	pages := [MaxPoolSize]*Page{}
 	for i := 0; i < MaxPoolSize; i++ {
@@ -109,5 +132,6 @@ func NewBufferPoolManager() *BufferPoolManager {
 	}
 
 	pageTable := make(map[PageID]FrameID)
-	return &BufferPoolManager{pages, freeList, pageTable}
+	replacer := NewLRUKReplacer(2)
+	return &BufferPoolManager{pages, freeList, pageTable, replacer, diskManager}
 }
