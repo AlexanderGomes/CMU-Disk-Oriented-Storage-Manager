@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 )
@@ -18,16 +19,36 @@ type DiskReq struct {
 
 type DiskScheduler struct {
 	RequestChan chan DiskReq
-	ResultChan  chan DiskReq
+	ResultChan  chan DiskResult
 	DiskManager *DiskManager
+}
+
+type DiskResult struct {
+	Page     Page
+	Response error
 }
 
 func (ds *DiskScheduler) ProccessReq() {
 	for req := range ds.RequestChan {
+		var result DiskResult
 		if req.Operation == "WRITE" {
-			ds.WriteToDisk(req)
+			err := ds.WriteToDisk(req)
+			result.Page = req.Page
+			if err != nil {
+				result.Response = errors.New("unable to write to disk: " + err.Error())
+			}
+
+			result.Response = nil
+			ds.ResultChan <- result
 		} else {
-			ds.ReadFromDisk(req.Page.ID)
+			page, err := ds.ReadFromDisk(req.Page.ID)
+			result.Page = page
+			if err != nil {
+				result.Response = errors.New("unable to read from disk: " + err.Error())
+			}
+
+			result.Response = nil
+			ds.ResultChan <- result
 		}
 	}
 }
@@ -170,7 +191,7 @@ func (ds *DiskScheduler) AddReq(request DiskReq) {
 func NewDiskScheduler(dm *DiskManager) *DiskScheduler {
 	diskScheduler := DiskScheduler{
 		RequestChan: make(chan DiskReq),
-		ResultChan:  make(chan DiskReq),
+		ResultChan:  make(chan DiskResult),
 		DiskManager: dm,
 	}
 

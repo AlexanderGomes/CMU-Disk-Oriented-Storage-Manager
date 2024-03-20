@@ -67,7 +67,6 @@ func (r *LRUKReplacer) Evict() (FrameID, error) {
 	r.accessHistory.Remove(r.frameToElem[evictedFrameID])
 	delete(r.frameToElem, evictedFrameID)
 
-	//remove from buffer pool
 	return evictedFrameID, nil
 }
 

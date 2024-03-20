@@ -114,7 +114,7 @@ func (dm *DiskManager) readHeader() (Offset, error) {
 			return Offset(binary.BigEndian.Uint64(headerBytes[:8])), nil
 		}
 	}
-	
+
 	return 0, nil
 }
 

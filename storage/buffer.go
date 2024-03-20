@@ -95,6 +95,12 @@ func (bpm *BufferPoolManager) FetchPage(pageID PageID) (*Page, error) {
 		}
 		bpm.Pin(pageID)
 		return &page, nil
+	} else {
+		req := DiskReq{
+			Page:      page,
+			Operation: "READ",
+		}
+		bpm.diskManager.Scheduler.AddReq(req)
 	}
 
 	return &page, nil
@@ -115,7 +121,8 @@ func (bpm *BufferPoolManager) Pin(pageID PageID) error {
 	if FrameID, ok := bpm.pageTable[pageID]; ok {
 		page := bpm.pages[FrameID]
 		page.IsPinned = true
-		// #replacemet policy
+
+		bpm.replacer.RecordAccess(FrameID)
 
 		return nil
 	}
