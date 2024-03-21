@@ -4,8 +4,6 @@ import (
 	"errors"
 )
 
-// maybe put it in one place
-
 type PageID int64
 type Page struct {
 	ID       PageID
@@ -51,6 +49,7 @@ func (bpm *BufferPoolManager) InsertPage(page *Page) bool {
 
 	return true
 }
+
 
 func (bpm *BufferPoolManager) Evict() error {
 	frameID, err := bpm.replacer.Evict()
@@ -143,8 +142,8 @@ func NewBufferPoolManager(k int, fileName string, headerSize int) (*BufferPoolMa
 		freeList = append(freeList, FrameID(i))
 		pages[FrameID(i)] = nil
 	}
-    pageTable := make(map[PageID]FrameID)
-	
+	pageTable := make(map[PageID]FrameID)
+
 	replacer := NewLRUKReplacer(k)
 	diskManager, err := NewDiskManager(fileName, int64(headerSize))
 	if err != nil {

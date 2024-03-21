@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,7 +34,7 @@ func (ds *DiskScheduler) ProccessReq() {
 		var result DiskResult
 		if req.Operation == "WRITE" {
 			err := ds.WriteToDisk(req)
-			result.Page = req.Page
+			result.Page.ID = req.Page.ID
 			if err != nil {
 				result.Response = errors.New("unable to write to disk: " + err.Error())
 			}
@@ -61,14 +62,8 @@ func (ds *DiskScheduler) ReadFromDisk(ID PageID) (Page, error) {
 	if err != nil {
 		return page, err
 	}
-
-	endIndex := 0
-	for i, b := range pageBytes {
-		if b == 0 {
-			endIndex = i
-			break
-		}
-	}
+	
+	endIndex := bytes.IndexByte(pageBytes, 0)
 
 	err = json.Unmarshal(pageBytes[:endIndex], &page)
 	if err != nil {
@@ -93,7 +88,6 @@ func (ds *DiskScheduler) WriteToDisk(req DiskReq) error {
 			return err
 		}
 
-		//#todo: handle when slot is not available
 		isSlotAvailable := firstByte == 0 && lastByte == 0
 		if isSlotAvailable {
 			pageOffset, err := ds.CreatePage(req.Page, Offset(startPosition))
@@ -126,9 +120,9 @@ func (ds *DiskScheduler) getPageBoundaryBytes(offset Offset) (byte, byte, error)
 		return 0, 0, err
 	}
 
-	pageEnd := int64(offset) + PageSize
+	pageEnd := int64(offset) + PageSize - 1
 	lastByte := make([]byte, 1)
-	_, err = ds.DiskManager.File.ReadAt(lastByte, pageEnd-1)
+	_, err = ds.DiskManager.File.ReadAt(lastByte, pageEnd)
 	if err != nil && err != io.EOF {
 		return 0, 0, err
 	}
@@ -143,7 +137,7 @@ func (ds *DiskScheduler) UpdateDirectoryPage(page DirectoryPage) error {
 	}
 
 	if len(encodedPage) > PageSize {
-		return fmt.Errorf("encoded data size exceeds 2KB")
+		return fmt.Errorf("encoded data exceeds 2KB")
 	}
 
 	position := ds.DiskManager.HeaderSize

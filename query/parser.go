@@ -37,7 +37,6 @@ func ParseQuery(query string) (*ParsedQuery, error) {
 					}
 
 				case *sqlparser.JoinTableExpr:
-					// on support
 					join := sqlparser.String(n)
 					parsedQuery.Joins = append(parsedQuery.Joins, join)
 				}

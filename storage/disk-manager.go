@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 )
 
@@ -138,7 +137,7 @@ func (dm *DiskManager) SetDefaultHeader() error {
 func (dm *DiskManager) initializeHeader() error {
 	defaultHeader := make([]byte, dm.HeaderSize)
 
-	_, err := dm.File.Write(defaultHeader)
+	_, err := dm.File.WriteAt(defaultHeader, 0)
 	if err != nil {
 		return err
 	}
@@ -147,13 +146,8 @@ func (dm *DiskManager) initializeHeader() error {
 }
 
 func (dm *DiskManager) LoadDirectoryPage(offset Offset) error {
-	_, err := dm.File.Seek(int64(offset), io.SeekStart)
-	if err != nil {
-		return err
-	}
-
 	dirPageBytes := make([]byte, PageSize)
-	_, err = dm.File.Read(dirPageBytes)
+	_, err := dm.File.ReadAt(dirPageBytes, int64(offset))
 	if err != nil {
 		return err
 	}
@@ -178,14 +172,7 @@ func (dm *DiskManager) updateHeader(offset Offset) error {
 	offsetBytes := make([]byte, dm.HeaderSize)
 	binary.BigEndian.PutUint64(offsetBytes, uint64(offset))
 
-	headerBytes := make([]byte, dm.HeaderSize)
-	if _, err := dm.File.ReadAt(headerBytes, 0); err != nil {
-		return err
-	}
-
-	copy(headerBytes[:dm.HeaderSize], offsetBytes)
-
-	_, err := dm.File.WriteAt(headerBytes, 0)
+	_, err := dm.File.WriteAt(offsetBytes, 0)
 	if err != nil {
 		return err
 	}

@@ -10,16 +10,15 @@ const k = 2          // replacement policy
 const fileName = "DB-file"
 
 func main() {
-	querys := `
-	SELECT u.name, o.amount
+	text := `
+	    SELECT u.name, o.amount
         FROM users AS u
         JOIN orders AS o ON u.id = o.user_id
         WHERE o.status = 'completed'
         GROUP BY u.name
         ORDER BY o.amount DESC
-        LIMIT 10;
 `
-	parsedQuery, _ := query.ParseQuery(querys)
+	parsedQuery, _ := query.ParseQuery(text)
 
 	// Use the parsedQuery object
 	// For example, print some information
