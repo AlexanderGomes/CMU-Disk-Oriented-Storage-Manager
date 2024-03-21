@@ -1,7 +1,7 @@
 package main
 
 import (
-	"disk-db/storage"
+	"disk-db/query"
 	"fmt"
 )
 
@@ -10,18 +10,24 @@ const k = 2          // replacement policy
 const fileName = "DB-file"
 
 func main() {
-	bufferPool, err := storage.InitDatabase(k, fileName, HeaderSize)
-	if err != nil {
-		fmt.Println(err)
-	}
-	data1 := [][]byte{[]byte("asasa"), []byte("sasasas")}
-	pageID1 := 129102801221212
-	data2 := [][]byte{[]byte("asasa"), []byte("sasasas")}
-	pageID2 := 129102801221212
-	data3 := [][]byte{[]byte("asasa"), []byte("sasasas")}
-	pageID3 := 129102801221212
+	querys := `
+	SELECT u.name, o.amount
+        FROM users AS u
+        JOIN orders AS o ON u.id = o.user_id
+        WHERE o.status = 'completed'
+        GROUP BY u.name
+        ORDER BY o.amount DESC
+        LIMIT 10;
+`
+	parsedQuery, _ := query.ParseQuery(querys)
 
-	bufferPool.CreateAndInsertPage(data1, storage.PageID(pageID1))
-	bufferPool.CreateAndInsertPage(data2, storage.PageID(pageID2))
-	bufferPool.CreateAndInsertPage(data3, storage.PageID(pageID3))
+	// Use the parsedQuery object
+	// For example, print some information
+	println("SQL Statement Type:", parsedQuery.SQLStatementType)
+	fmt.Println("Table References:", parsedQuery.TableReferences)
+	fmt.Println("Columns Selected:", parsedQuery.ColumnsSelected)
+	fmt.Println("Predicates:", parsedQuery.Predicates)
+	fmt.Println("Joins:", parsedQuery.Joins)
+	println("Group By:", parsedQuery.GroupBy)
+	println("Order By:", parsedQuery.OrderBy)
 }
