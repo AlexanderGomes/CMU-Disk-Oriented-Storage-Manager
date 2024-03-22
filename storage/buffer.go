@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"log"
 )
 
 type PageID int64
@@ -12,14 +13,15 @@ type Page struct {
 	IsPinned bool
 }
 
-const MaxPoolSize = 50
+const MaxPoolSize = 40
+
 type FrameID int
 type BufferPoolManager struct {
 	Pages       [MaxPoolSize]*Page
 	freeList    []FrameID
 	pageTable   map[PageID]FrameID
 	replacer    *LRUKReplacer
-	diskManager *DiskManager // maybe use a pointer
+	DiskManager *DiskManager // maybe use a pointer
 }
 
 func (bpm *BufferPoolManager) CreateAndInsertPage(data [][]byte, ID PageID) error {
@@ -28,17 +30,23 @@ func (bpm *BufferPoolManager) CreateAndInsertPage(data [][]byte, ID PageID) erro
 		Data: data,
 	}
 
-	isAdded := bpm.InsertPage(page)
-	if !isAdded {
-		return errors.New("unable to add page to buffer pool")
+	err := bpm.InsertPage(page)
+	if err != nil {
+		log.Print(err)
 	}
 
+	log.Println(bpm.Pages, "PAGES ARRAY")
+	log.Println(page, "PAGE ADDED")
 	return nil
 }
 
-func (bpm *BufferPoolManager) InsertPage(page *Page) bool {
-	if len(bpm.freeList) == 0 {
-		return false
+func (bpm *BufferPoolManager) InsertPage(page *Page) error {
+	freeSpace := MaxPoolSize - len(bpm.freeList)
+	threashold := 25
+
+	if freeSpace == threashold {
+		err := bpm.Evict()
+		log.Printf("unable to evict: %s", err.Error())
 	}
 
 	frameID := bpm.freeList[0]
@@ -47,9 +55,8 @@ func (bpm *BufferPoolManager) InsertPage(page *Page) bool {
 	bpm.Pages[frameID] = page
 	bpm.pageTable[page.ID] = frameID
 
-	return true
+	return nil
 }
-
 
 func (bpm *BufferPoolManager) Evict() error {
 	frameID, err := bpm.replacer.Evict()
@@ -63,7 +70,7 @@ func (bpm *BufferPoolManager) Evict() error {
 		Operation: "WRITE",
 	}
 
-	bpm.diskManager.Scheduler.AddReq(req)
+	bpm.DiskManager.Scheduler.AddReq(req)
 	bpm.DeletePage(page.ID)
 
 	return nil
@@ -96,9 +103,9 @@ func (bpm *BufferPoolManager) FetchPage(pageID PageID) (*Page, error) {
 			Page:      page,
 			Operation: "READ",
 		}
-		bpm.diskManager.Scheduler.AddReq(req)
+		bpm.DiskManager.Scheduler.AddReq(req)
 
-		for result := range bpm.diskManager.Scheduler.ResultChan {
+		for result := range bpm.DiskManager.Scheduler.ResultChan {
 			if result.Page.ID == pageID {
 				bpm.InsertPage(&result.Page)
 				bpm.Pin(result.Page.ID)
