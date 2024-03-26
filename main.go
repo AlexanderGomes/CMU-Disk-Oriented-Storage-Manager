@@ -17,31 +17,30 @@ func main() {
 	}
 
 	go DB.DiskManager.Scheduler.ProccessReq()
-	go Pages(DB)
-	ticker := time.Tick(4 * time.Second)
+	go CreatePages(DB)
+	ticker := time.Tick(60 * time.Second)
 	for range ticker {
-		go AccessPages(DB)
+		AcessPages(DB)
+		DB.Evict()
 	}
 
 	select {}
 }
 
-func AccessPages(DB *storage.BufferPoolManager) {
-	for i := 0; i < len(DB.Pages); i++ {
-		pagePtr := DB.Pages[i]
-		if pagePtr != nil {
-			page, _ := DB.FetchPage(pagePtr.ID)
-			page, _ = DB.FetchPage(pagePtr.ID)
-			page, _ = DB.FetchPage(pagePtr.ID)
-			page, _ = DB.FetchPage(pagePtr.ID)
-			page, _ = DB.FetchPage(pagePtr.ID)
-			log.Printf("page fetched: %s", page)
-		}
+func AcessPages(DB *storage.BufferPoolManager) {
+	var page storage.Page
+	for i := 0; i < 20; i++ {
+		page = *DB.Pages[i]
+		DB.FetchPage(page.ID)
+		DB.FetchPage(page.ID)
+		DB.FetchPage(page.ID)
+		DB.FetchPage(page.ID)
+		DB.FetchPage(page.ID)
+		log.Printf("pageID: %s", page.ID)
 	}
 }
 
-// simulating DB receiving data and creating pages
-func Pages(DB *storage.BufferPoolManager) {
+func CreatePages(DB *storage.BufferPoolManager) {
 	for {
 		data := [][]byte{{byte(time.Now().Second())}}
 		pageID := storage.PageID(time.Now().UnixNano())

@@ -9,11 +9,6 @@ import (
 
 const PageSize = 2048
 
-type Offset int64
-type DirectoryPage struct {
-	Mapping map[PageID]Offset
-}
-
 type DiskManager struct {
 	File          *os.File
 	DirectoryPage DirectoryPage // maybe use a pointer

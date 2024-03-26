@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 )
 
 type EncodablePage struct {
@@ -31,6 +32,7 @@ type DiskResult struct {
 
 func (ds *DiskScheduler) ProccessReq() {
 	for req := range ds.RequestChan {
+		fmt.Println(req, "REQUEST RECEIVED")
 		var result DiskResult
 		if req.Operation == "WRITE" {
 			err := ds.WriteToDisk(req)
@@ -62,7 +64,7 @@ func (ds *DiskScheduler) ReadFromDisk(ID PageID) (Page, error) {
 	if err != nil {
 		return page, err
 	}
-	
+
 	endIndex := bytes.IndexByte(pageBytes, 0)
 
 	err = json.Unmarshal(pageBytes[:endIndex], &page)
@@ -80,6 +82,7 @@ func (ds *DiskScheduler) WriteToDisk(req DiskReq) error {
 	}
 
 	offset := ds.DiskManager.DirectoryPage.Mapping[req.Page.ID]
+	log.Print("writing to disk, offset:", offset)
 
 	//#page doesn't exist
 	if offset == 0 {
@@ -177,8 +180,9 @@ func (ds *DiskScheduler) CreatePage(page Page, offset Offset) (Offset, error) {
 	return Offset(offset), nil
 }
 
-func (ds *DiskScheduler) AddReq(request DiskReq) {
+func (ds *DiskScheduler) AddReq(request DiskReq) error {
 	ds.RequestChan <- request
+	return nil
 }
 
 func NewDiskScheduler(dm *DiskManager) *DiskScheduler {

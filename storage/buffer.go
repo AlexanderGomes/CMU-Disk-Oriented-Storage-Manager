@@ -5,23 +5,14 @@ import (
 	"log"
 )
 
-type PageID int64
-type Page struct {
-	ID       PageID
-	Data     [][]byte
-	IsDirty  bool
-	IsPinned bool
-}
-
-const MaxPoolSize = 40
-
+const MaxPoolSize = 1000
 type FrameID int
 type BufferPoolManager struct {
 	Pages       [MaxPoolSize]*Page
 	freeList    []FrameID
 	pageTable   map[PageID]FrameID
-	replacer    *LRUKReplacer
-	DiskManager *DiskManager // maybe use a pointer
+	Replacer    *LRUKReplacer
+	DiskManager *DiskManager 
 }
 
 func (bpm *BufferPoolManager) CreateAndInsertPage(data [][]byte, ID PageID) error {
@@ -35,18 +26,14 @@ func (bpm *BufferPoolManager) CreateAndInsertPage(data [][]byte, ID PageID) erro
 		log.Print(err)
 	}
 
-	log.Println(bpm.Pages, "PAGES ARRAY")
 	log.Println(page, "PAGE ADDED")
 	return nil
 }
 
 func (bpm *BufferPoolManager) InsertPage(page *Page) error {
-	freeSpace := MaxPoolSize - len(bpm.freeList)
-	threashold := 25
-
-	if freeSpace == threashold {
-		err := bpm.Evict()
-		log.Printf("unable to evict: %s", err.Error())
+	if len(bpm.freeList) == 0 {
+		log.Println("full buffer pool")
+		return nil
 	}
 
 	frameID := bpm.freeList[0]
@@ -59,7 +46,7 @@ func (bpm *BufferPoolManager) InsertPage(page *Page) error {
 }
 
 func (bpm *BufferPoolManager) Evict() error {
-	frameID, err := bpm.replacer.Evict()
+	frameID, err := bpm.Replacer.Evict()
 	if err != nil {
 		return err
 	}
@@ -105,6 +92,7 @@ func (bpm *BufferPoolManager) FetchPage(pageID PageID) (*Page, error) {
 		}
 		bpm.DiskManager.Scheduler.AddReq(req)
 
+		// stuck waiting for result
 		for result := range bpm.DiskManager.Scheduler.ResultChan {
 			if result.Page.ID == pageID {
 				bpm.InsertPage(&result.Page)
@@ -134,7 +122,7 @@ func (bpm *BufferPoolManager) Pin(pageID PageID) error {
 		page := bpm.Pages[FrameID]
 		page.IsPinned = true
 
-		bpm.replacer.RecordAccess(FrameID)
+		bpm.Replacer.RecordAccess(FrameID)
 
 		return nil
 	}
