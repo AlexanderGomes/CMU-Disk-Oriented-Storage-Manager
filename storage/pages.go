@@ -3,21 +3,13 @@ package storage
 type PageID int64
 type Page struct {
 	ID       PageID
-	Data     [][]byte
-	IsDirty  bool
-	IsPinned bool
-}
-
-type PageTest struct {
-	ID       PageID
-	Data     []Node
+	Rows     map[string]Row
 	IsDirty  bool
 	IsPinned bool
 }
 
 type Row struct {
-	Columns []Column
-	Values  map[string]interface{}
+	Values map[string]string
 }
 
 type Column struct {

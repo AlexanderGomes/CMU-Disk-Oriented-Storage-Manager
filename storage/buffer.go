@@ -5,34 +5,48 @@ import (
 	"log"
 )
 
-const MaxPoolSize = 1000
+const MaxPoolSize = 100000
+
 type FrameID int
 type BufferPoolManager struct {
 	Pages       [MaxPoolSize]*Page
 	freeList    []FrameID
 	pageTable   map[PageID]FrameID
 	Replacer    *LRUKReplacer
-	DiskManager *DiskManager 
+	DiskManager *DiskManager // maybe use a pointer
 }
 
-func (bpm *BufferPoolManager) CreateAndInsertPage(data [][]byte, ID PageID) error {
+func (bpm *BufferPoolManager) CreateAndInsertPage(data []Row, ID PageID) error {
 	page := &Page{
 		ID:   ID,
-		Data: data,
+		Rows: make(map[string]Row),
 	}
+
+	InsertRows(data, *page)
 
 	err := bpm.InsertPage(page)
 	if err != nil {
 		log.Print(err)
 	}
 
-	log.Println(page, "PAGE ADDED")
 	return nil
+}
+
+func InsertRows(data []Row, page Page) {
+	for _, row := range data {
+		var id string
+		for key, value := range row.Values {
+			if key == "ID" {
+				id = value
+			}
+		}
+		row := Row{Values: row.Values}
+		page.Rows[id] = row
+	}
 }
 
 func (bpm *BufferPoolManager) InsertPage(page *Page) error {
 	if len(bpm.freeList) == 0 {
-		log.Println("full buffer pool")
 		return nil
 	}
 
@@ -59,7 +73,6 @@ func (bpm *BufferPoolManager) Evict() error {
 
 	bpm.DiskManager.Scheduler.AddReq(req)
 	bpm.DeletePage(page.ID)
-
 	return nil
 }
 

@@ -17,37 +17,28 @@ func main() {
 	}
 
 	go DB.DiskManager.Scheduler.ProccessReq()
-	go CreatePages(DB)
-	ticker := time.Tick(60 * time.Second)
-	for range ticker {
-		AcessPages(DB)
-		DB.Evict()
-	}
+	go func() {
+		ticker := time.Tick(10 * time.Second)
+		for range ticker {
+			AcessPages(DB)
+			DB.Evict()
+		}
+	}()
 
 	select {}
 }
 
+var i int
 func AcessPages(DB *storage.BufferPoolManager) {
 	var page storage.Page
-	for i := 0; i < 20; i++ {
-		page = *DB.Pages[i]
-		DB.FetchPage(page.ID)
-		DB.FetchPage(page.ID)
-		DB.FetchPage(page.ID)
-		DB.FetchPage(page.ID)
-		DB.FetchPage(page.ID)
-		log.Printf("pageID: %s", page.ID)
-	}
+	page = *DB.Pages[i]
+	DB.FetchPage(page.ID)
+	DB.FetchPage(page.ID)
+	DB.FetchPage(page.ID)
+	DB.FetchPage(page.ID)
+	DB.FetchPage(page.ID)
+	DB.Unpin(page.ID, false)
+	log.Printf("pageID: %s", page.ID)
+	i++
 }
 
-func CreatePages(DB *storage.BufferPoolManager) {
-	for {
-		data := [][]byte{{byte(time.Now().Second())}}
-		pageID := storage.PageID(time.Now().UnixNano())
-		err := DB.CreateAndInsertPage(data, pageID)
-		if err != nil {
-			log.Printf("Error creating and inserting page: %v\n", err)
-		}
-		time.Sleep(time.Second)
-	}
-}

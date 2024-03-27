@@ -6,17 +6,21 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 )
 
 type EncodablePage struct {
 	ID   PageID
-	Data [][]byte
+	Data map[string]Row
 }
 
 type DiskReq struct {
 	Page      Page
 	Operation string
+}
+
+type DiskResult struct {
+	Page     Page
+	Response error
 }
 
 type DiskScheduler struct {
@@ -25,15 +29,10 @@ type DiskScheduler struct {
 	DiskManager *DiskManager
 }
 
-type DiskResult struct {
-	Page     Page
-	Response error
-}
-
 func (ds *DiskScheduler) ProccessReq() {
 	for req := range ds.RequestChan {
-		fmt.Println(req, "REQUEST RECEIVED")
 		var result DiskResult
+
 		if req.Operation == "WRITE" {
 			err := ds.WriteToDisk(req)
 			result.Page.ID = req.Page.ID
@@ -48,10 +47,14 @@ func (ds *DiskScheduler) ProccessReq() {
 			if err != nil {
 				result.Response = errors.New("unable to read from disk: " + err.Error())
 			}
-
 			result.Response = nil
 		}
-		ds.ResultChan <- result
+
+		select {
+		case ds.ResultChan <- result:
+		default:
+			fmt.Println("No listener for result")
+		}
 	}
 }
 
@@ -82,10 +85,9 @@ func (ds *DiskScheduler) WriteToDisk(req DiskReq) error {
 	}
 
 	offset := ds.DiskManager.DirectoryPage.Mapping[req.Page.ID]
-	log.Print("writing to disk, offset:", offset)
 
-	//#page doesn't exist
-	if offset == 0 {
+	pageNotFound := offset == 0
+	if pageNotFound {
 		firstByte, lastByte, err := ds.getPageBoundaryBytes(Offset(startPosition))
 		if err != nil {
 			return err
@@ -93,24 +95,29 @@ func (ds *DiskScheduler) WriteToDisk(req DiskReq) error {
 
 		isSlotAvailable := firstByte == 0 && lastByte == 0
 		if isSlotAvailable {
-			pageOffset, err := ds.CreatePage(req.Page, Offset(startPosition))
+			pageOffset, err := ds.CreatePage(req, Offset(startPosition))
 			if err != nil {
 				return err
 			}
-			//update in-memory and on-disk directory
 			ds.DiskManager.DirectoryPage.Mapping[req.Page.ID] = pageOffset
 			ds.UpdateDirectoryPage(ds.DiskManager.DirectoryPage)
 		}
 	} else {
-		encodablePage := EncodablePage{
-			ID:   req.Page.ID,
-			Data: req.Page.Data,
-		}
-		pageBytes, _ := Encode(encodablePage)
-		_, err := ds.DiskManager.File.WriteAt(pageBytes, int64(offset))
-		if err != nil {
-			return err
-		}
+		ds.writePage(req, offset)
+	}
+
+	return nil
+}
+
+func (ds *DiskScheduler) writePage(req DiskReq, offset Offset) error {
+	encodablePage := EncodablePage{
+		ID:   req.Page.ID,
+		Data: req.Page.Rows,
+	}
+	pageBytes, _ := Encode(encodablePage)
+	_, err := ds.DiskManager.File.WriteAt(pageBytes, int64(offset))
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -153,10 +160,10 @@ func (ds *DiskScheduler) UpdateDirectoryPage(page DirectoryPage) error {
 	return nil
 }
 
-func (ds *DiskScheduler) CreatePage(page Page, offset Offset) (Offset, error) {
+func (ds *DiskScheduler) CreatePage(req DiskReq, offset Offset) (Offset, error) {
 	encodablePage := EncodablePage{
-		ID:   page.ID,
-		Data: page.Data,
+		ID:   req.Page.ID,
+		Data: req.Page.Rows,
 	}
 
 	encodedPage, err := Encode(encodablePage)
@@ -180,9 +187,8 @@ func (ds *DiskScheduler) CreatePage(page Page, offset Offset) (Offset, error) {
 	return Offset(offset), nil
 }
 
-func (ds *DiskScheduler) AddReq(request DiskReq) error {
+func (ds *DiskScheduler) AddReq(request DiskReq) {
 	ds.RequestChan <- request
-	return nil
 }
 
 func NewDiskScheduler(dm *DiskManager) *DiskScheduler {
