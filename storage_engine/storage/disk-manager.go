@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-const PageSize = 2 * 1024
+const PageSize = 4 * 1024
 const DirectoryPageSize = 64 * 1024
 
 type DiskManager struct {

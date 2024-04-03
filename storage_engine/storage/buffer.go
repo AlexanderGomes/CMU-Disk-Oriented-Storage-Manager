@@ -5,7 +5,7 @@ import (
 	"log"
 )
 
-const MaxPoolSize = 100000
+const MaxPoolSize = 4000
 
 type FrameID int
 type BufferPoolManager struct {
@@ -17,6 +17,7 @@ type BufferPoolManager struct {
 }
 
 func (bpm *BufferPoolManager) CreateAndInsertPage(data []Row, ID PageID) error {
+	// evict pages if it's up to a certain limit
 	page := &Page{
 		ID:   ID,
 		Rows: make(map[string]Row),

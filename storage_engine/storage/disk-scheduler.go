@@ -118,8 +118,9 @@ func (ds *DiskScheduler) writePage(req DiskReq, offset Offset) error {
 	pageBytes, _ := Encode(encodablePage)
 
 	if len(pageBytes) > PageSize {
-		return fmt.Errorf("encoded data exceeds Page Size")
+		pageBytes = pageBytes[:PageSize]
 	}
+
 	_, err := ds.DiskManager.File.WriteAt(pageBytes, int64(offset))
 	if err != nil {
 		return err

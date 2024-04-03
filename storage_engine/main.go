@@ -9,9 +9,24 @@ import (
 	"time"
 )
 
-const HeaderSize = 8 
-const k = 2    
-const fileName = "DB-file"
+const (
+	HeaderSize = 8
+	k          = 2
+	fileName   = "DB-file"
+	rowsLimit  = 50
+)
+
+// # buffer pool receives requests from external world
+const (
+	FetchPage  = "FETCH PAGE"
+	InsertData = "INSERT DATA"
+)
+
+type BufferReq struct {
+	Operation string
+	PageID    storage.PageID
+	Data      []storage.Row
+}
 
 func main() {
 	DB, err := storage.InitDatabase(k, fileName, HeaderSize)
@@ -40,24 +55,23 @@ const (
 )
 
 func CreatePages(DB *storage.BufferPoolManager) {
-	idCounter := rand.Int63n(1000)
-	idString := strconv.FormatInt(idCounter, 10)
+	var rows []storage.Row
+	for i := 0; i < 50; i++ {
+		idCounter := rand.Int63n(1000)
+		idString := strconv.FormatInt(idCounter, 10)
 
-	data := storage.Row{
-		Values: map[string]string{
-			ID:      idString,
-			NAME:    "John Doe",
-			AGE:     "22",
-			COMPANY: "Acme Inc",
-		},
+		data := storage.Row{
+			Values: map[string]string{
+				ID:      idString,
+				NAME:    "John Doe",
+				AGE:     "22",
+				COMPANY: "Acme Inc",
+			},
+		}
+		rows = append(rows, data)
 	}
 
 	for {
-		var rows []storage.Row
-		for i := 0; i < 30; i++ {
-			rows = append(rows, data)
-
-		}
 		pageID := storage.PageID(time.Now().UnixNano())
 		err := DB.CreateAndInsertPage(rows, pageID)
 		if err != nil {
