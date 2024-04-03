@@ -13,7 +13,7 @@ type BufferPoolManager struct {
 	freeList    []FrameID
 	pageTable   map[PageID]FrameID
 	Replacer    *LRUKReplacer
-	DiskManager *DiskManager // maybe use a pointer
+	DiskManager *DiskManager
 }
 
 func (bpm *BufferPoolManager) CreateAndInsertPage(data []Row, ID PageID) error {
@@ -22,7 +22,7 @@ func (bpm *BufferPoolManager) CreateAndInsertPage(data []Row, ID PageID) error {
 		Rows: make(map[string]Row),
 	}
 
-	InsertRows(data, *page)
+	InsertRows(data, page)
 
 	err := bpm.InsertPage(page)
 	if err != nil {
@@ -32,12 +32,13 @@ func (bpm *BufferPoolManager) CreateAndInsertPage(data []Row, ID PageID) error {
 	return nil
 }
 
-func InsertRows(data []Row, page Page) {
+func InsertRows(data []Row, page *Page) {
 	for _, row := range data {
 		var id string
 		for key, value := range row.Values {
 			if key == "ID" {
 				id = value
+				break
 			}
 		}
 		row := Row{Values: row.Values}
@@ -105,7 +106,6 @@ func (bpm *BufferPoolManager) FetchPage(pageID PageID) (*Page, error) {
 		}
 		bpm.DiskManager.Scheduler.AddReq(req)
 
-		// stuck waiting for result
 		for result := range bpm.DiskManager.Scheduler.ResultChan {
 			if result.Page.ID == pageID {
 				bpm.InsertPage(&result.Page)
@@ -134,7 +134,6 @@ func (bpm *BufferPoolManager) Pin(pageID PageID) error {
 	if FrameID, ok := bpm.pageTable[pageID]; ok {
 		page := bpm.Pages[FrameID]
 		page.IsPinned = true
-
 		bpm.Replacer.RecordAccess(FrameID)
 
 		return nil

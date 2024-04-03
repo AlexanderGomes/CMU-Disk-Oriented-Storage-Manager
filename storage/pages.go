@@ -12,11 +12,6 @@ type Row struct {
 	Values map[string]string
 }
 
-type Column struct {
-	Name string
-	Type string
-}
-
 type Offset int64
 type DirectoryPage struct {
 	Mapping map[PageID]Offset

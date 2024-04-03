@@ -10,7 +10,7 @@ import (
 
 type EncodablePage struct {
 	ID   PageID
-	Data map[string]Row
+	Rows map[string]Row
 }
 
 type DiskReq struct {
@@ -112,9 +112,14 @@ func (ds *DiskScheduler) WriteToDisk(req DiskReq) error {
 func (ds *DiskScheduler) writePage(req DiskReq, offset Offset) error {
 	encodablePage := EncodablePage{
 		ID:   req.Page.ID,
-		Data: req.Page.Rows,
+		Rows: req.Page.Rows,
 	}
+
 	pageBytes, _ := Encode(encodablePage)
+
+	if len(pageBytes) > PageSize {
+		return fmt.Errorf("encoded data exceeds Page Size")
+	}
 	_, err := ds.DiskManager.File.WriteAt(pageBytes, int64(offset))
 	if err != nil {
 		return err
@@ -146,8 +151,8 @@ func (ds *DiskScheduler) UpdateDirectoryPage(page DirectoryPage) error {
 		return err
 	}
 
-	if len(encodedPage) > PageSize {
-		return fmt.Errorf("encoded data exceeds 2KB")
+	if len(encodedPage) > DirectoryPageSize {
+		return fmt.Errorf("encoded data exceeds Directory Page Size, Unable to UPDATE")
 	}
 
 	position := ds.DiskManager.HeaderSize
@@ -163,7 +168,7 @@ func (ds *DiskScheduler) UpdateDirectoryPage(page DirectoryPage) error {
 func (ds *DiskScheduler) CreatePage(req DiskReq, offset Offset) (Offset, error) {
 	encodablePage := EncodablePage{
 		ID:   req.Page.ID,
-		Data: req.Page.Rows,
+		Rows: req.Page.Rows,
 	}
 
 	encodedPage, err := Encode(encodablePage)

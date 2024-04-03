@@ -7,11 +7,12 @@ import (
 	"os"
 )
 
-const PageSize = 2048
+const PageSize = 2 * 1024
+const DirectoryPageSize = 64 * 1024
 
 type DiskManager struct {
 	File          *os.File
-	DirectoryPage DirectoryPage // maybe use a pointer
+	DirectoryPage DirectoryPage
 	HeaderSize    int64
 	Scheduler     *DiskScheduler
 }
@@ -81,7 +82,7 @@ func (dm *DiskManager) createDirectoryPage() error {
 func (dm *DiskManager) WriteDirectoryDisk(pageBytes []byte) (Offset, error) {
 	offset := dm.HeaderSize
 
-	paddingSize := PageSize - len(pageBytes)
+	paddingSize := DirectoryPageSize - len(pageBytes)
 
 	buffer := append(pageBytes, make([]byte, paddingSize)...)
 
@@ -90,7 +91,7 @@ func (dm *DiskManager) WriteDirectoryDisk(pageBytes []byte) (Offset, error) {
 		return 0, err
 	}
 
-	if n != PageSize {
+	if n != DirectoryPageSize {
 		return 0, fmt.Errorf("failed to write entire page to disk")
 	}
 
