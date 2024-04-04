@@ -29,4 +29,4 @@ I changed the design of the directory page from EXTENDIBLE HASH INDEX to a B+ Tr
 
 ### Row Pages
 
-Row pages store actual data records within the database. They organize data in a format suitable for efficient retrieval and manipulation operations.
+Row pages store actual data records within the database. I used a hashmap for it since each page could only hold 50 entries of JSON data, if I was to store it as bytes I would use a different data structure.
