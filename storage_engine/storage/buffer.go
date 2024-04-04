@@ -2,10 +2,28 @@ package storage
 
 import (
 	"errors"
+	"fmt"
 	"log"
+	"sync"
 )
 
-const MaxPoolSize = 4000
+const (
+	FetchPage   = "FETCH PAGE"
+	InsertData  = "INSERT DATA"
+	MaxPoolSize = 4000
+)
+
+type BufferReq struct {
+	Operation string
+	PageID    PageID
+	Data      []Row
+}
+
+type BufferRes struct {
+	PageID  PageID
+	PagePtr *Page
+	Error   error
+}
 
 type FrameID int
 type BufferPoolManager struct {
@@ -14,10 +32,45 @@ type BufferPoolManager struct {
 	pageTable   map[PageID]FrameID
 	Replacer    *LRUKReplacer
 	DiskManager *DiskManager
+	AccessChan  chan BufferReq
+	ResultChan  chan BufferRes
+	mu          sync.Mutex
+}
+
+func (bpm *BufferPoolManager) Worker() {
+	for req := range bpm.AccessChan {
+		fmt.Println(req.Operation)
+		var result BufferRes
+
+		switch req.Operation {
+		case FetchPage:
+			pagePtr, err := bpm.FetchPage(req.PageID)
+			if err != nil {
+				result.Error = errors.New("unable to fetch page: " + err.Error())
+			}
+
+			result.PageID = req.PageID
+			result.PagePtr = pagePtr
+
+		case InsertData:
+			err := bpm.CreateAndInsertPage(req.Data, req.PageID)
+			if err != nil {
+				result.Error = errors.New("unable to write page: " + err.Error())
+			}
+			result.PageID = req.PageID
+		default:
+			fmt.Println("invalid request")
+		}
+
+		select {
+		case bpm.ResultChan <- result:
+		default:
+			fmt.Println("No listener for result")
+		}
+	}
 }
 
 func (bpm *BufferPoolManager) CreateAndInsertPage(data []Row, ID PageID) error {
-	// evict pages if it's up to a certain limit
 	page := &Page{
 		ID:   ID,
 		Rows: make(map[string]Row),
@@ -51,7 +104,6 @@ func (bpm *BufferPoolManager) InsertPage(page *Page) error {
 	if len(bpm.freeList) == 0 {
 		return nil
 	}
-
 	frameID := bpm.freeList[0]
 	bpm.freeList = bpm.freeList[1:]
 
@@ -75,15 +127,12 @@ func (bpm *BufferPoolManager) Evict() error {
 
 	bpm.DiskManager.Scheduler.AddReq(req)
 	bpm.DeletePage(page.ID)
+	fmt.Println("EVICTED")
 	return nil
 }
 
 func (bpm *BufferPoolManager) DeletePage(pageID PageID) (FrameID, error) {
 	if frameID, ok := bpm.pageTable[pageID]; ok {
-		page := bpm.Pages[frameID]
-		if page.IsPinned {
-			return 0, errors.New("Page is pinned, cannot delete")
-		}
 		delete(bpm.pageTable, pageID)
 		bpm.Pages[frameID] = nil
 		bpm.freeList = append(bpm.freeList, frameID)
@@ -94,6 +143,9 @@ func (bpm *BufferPoolManager) DeletePage(pageID PageID) (FrameID, error) {
 
 func (bpm *BufferPoolManager) FetchPage(pageID PageID) (*Page, error) {
 	var page Page
+	bpm.mu.Lock()
+	defer bpm.mu.Unlock()
+
 	if frameID, ok := bpm.pageTable[pageID]; ok {
 		page = *bpm.Pages[frameID]
 		if page.IsPinned {
@@ -158,5 +210,8 @@ func NewBufferPoolManager(k int, fileName string, headerSize int) (*BufferPoolMa
 		return nil, err
 	}
 
-	return &BufferPoolManager{pages, freeList, pageTable, replacer, diskManager}, nil
+	accessChan := make(chan BufferReq)
+	resultChan := make(chan BufferRes)
+
+	return &BufferPoolManager{pages, freeList, pageTable, replacer, diskManager, accessChan, resultChan, sync.Mutex{}}, nil
 }

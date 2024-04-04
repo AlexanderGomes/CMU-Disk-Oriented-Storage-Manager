@@ -2,7 +2,6 @@ package main
 
 import (
 	"disk-db/storage"
-	"fmt"
 	"log"
 	"math/rand"
 	"strconv"
@@ -14,12 +13,7 @@ const (
 	k          = 2
 	fileName   = "DB-file"
 	rowsLimit  = 50
-)
-
-// # buffer pool receives requests from external world
-const (
-	FetchPage  = "FETCH PAGE"
-	InsertData = "INSERT DATA"
+	numWorkers = 3
 )
 
 type BufferReq struct {
@@ -33,18 +27,57 @@ func main() {
 	if err != nil {
 		log.Print(err)
 	}
-
+	for i := 0; i < numWorkers; i++ {
+		go DB.Worker()
+	}
 	go DB.DiskManager.Scheduler.ProccessReq()
 	go CreatePages(DB)
 	go func() {
-		ticker := time.Tick(10 * time.Second)
+		ticker := time.Tick(4 * time.Second)
 		for range ticker {
 			AcessPages(DB)
+		}
+	}()
+	go func() {
+		ticker := time.Tick(15 * time.Second)
+		for range ticker {
 			DB.Evict()
 		}
 	}()
 
 	select {}
+}
+
+var i int
+func AcessPages(DB *storage.BufferPoolManager) {
+	pages := DB.Pages[i]
+	page := *pages
+	bufferReq := storage.BufferReq{
+		Operation: "FETCH PAGE",
+		PageID:    page.ID,
+		Data:      []storage.Row{},
+	}
+	DB.AccessChan <- bufferReq
+
+	pages2 := DB.Pages[i+1]
+	page2 := *pages2
+	bufferReq2 := storage.BufferReq{
+		Operation: "FETCH PAGE",
+		PageID:    page2.ID,
+		Data:      []storage.Row{},
+	}
+	DB.AccessChan <- bufferReq2
+
+	pages3 := DB.Pages[i+1]
+	page3 := *pages3
+	bufferReq3 := storage.BufferReq{
+		Operation: "FETCH PAGE",
+		PageID:    page3.ID,
+		Data:      []storage.Row{},
+	}
+	DB.AccessChan <- bufferReq3
+
+	i += 3
 }
 
 const (
@@ -55,44 +88,31 @@ const (
 )
 
 func CreatePages(DB *storage.BufferPoolManager) {
-	var rows []storage.Row
-	for i := 0; i < 50; i++ {
-		idCounter := rand.Int63n(1000)
-		idString := strconv.FormatInt(idCounter, 10)
-
-		data := storage.Row{
-			Values: map[string]string{
-				ID:      idString,
-				NAME:    "John Doe",
-				AGE:     "22",
-				COMPANY: "Acme Inc",
-			},
-		}
-		rows = append(rows, data)
-	}
-
 	for {
-		pageID := storage.PageID(time.Now().UnixNano())
-		err := DB.CreateAndInsertPage(rows, pageID)
-		if err != nil {
-			log.Printf("Error creating and inserting page: %v\n", err)
+		var rows []storage.Row
+		for i := 0; i < rowsLimit; i++ {
+			idCounter := rand.Int63n(1000)
+			idString := strconv.FormatInt(idCounter, 10)
+
+			data := storage.Row{
+				Values: map[string]string{
+					ID:      idString,
+					NAME:    "John Doe",
+					AGE:     "22",
+					COMPANY: "Acme Inc",
+				},
+			}
+			rows = append(rows, data)
 		}
-		fmt.Println(rows)
+
+		pageID := storage.PageID(time.Now().UnixNano())
+		bufferReq := storage.BufferReq{
+			Operation: "INSERT DATA",
+			PageID:    pageID,
+			Data:      rows,
+		}
+
+		DB.AccessChan <- bufferReq
 		time.Sleep(time.Second)
 	}
-}
-
-var i int
-
-func AcessPages(DB *storage.BufferPoolManager) {
-	var page storage.Page
-	page = *DB.Pages[i]
-	DB.FetchPage(page.ID)
-	DB.FetchPage(page.ID)
-	DB.FetchPage(page.ID)
-	DB.FetchPage(page.ID)
-	DB.FetchPage(page.ID)
-	DB.Unpin(page.ID, false)
-	log.Printf("pageID: %s", page.ID)
-	i++
 }

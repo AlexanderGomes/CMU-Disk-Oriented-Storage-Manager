@@ -49,6 +49,7 @@ func (r *LRUKReplacer) Evict() (FrameID, error) {
 	minFrequency := math.MaxInt64
 	var evictedFrameID FrameID
 	for frameID := range r.frameToElem {
+		//look up on buffer pool if page is pinned
 		distance, err := r.computeBackwardKDistance(frameID)
 		if err != nil {
 			return -1, err
