@@ -11,7 +11,7 @@ The Buffer Pool Manager plays a crucial role in managing the memory used for cac
 
 ### Replacer
 
-The Replacer component is responsible for managing the replacement strategy within the buffer pool. It determines which pages should be evicted from memory when additional space is required, I chose to use the LRU-K algorithm taking into consideration both past access timestamps and the frequency of pages.
+The Replacer component is responsible for managing the replacement strategy within the buffer pool. It determines which pages should be evicted from memory when additional space is required, I chose to use the LRU-K algorithm taking into consideration both past access timestamps and the frequency of page accesses.
 
 ### Disk Manager
 
