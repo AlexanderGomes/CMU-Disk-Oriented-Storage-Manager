@@ -11,11 +11,11 @@ The Buffer Pool Manager plays a crucial role in managing the memory used for cac
 
 ### Replacer
 
-The Replacer component is responsible for managing the replacement strategy within the buffer pool. It determines which pages should be evicted from memory when additional space is required.
+The Replacer component is responsible for managing the replacement strategy within the buffer pool. It determines which pages should be evicted from memory when additional space is required, I chose to use the LRU-K algorithm taking into consideration both past access timestamps and the frequency of page accesses.
 
 ### Disk Manager
 
-The Disk Manager facilitates interactions between the database system and the physical storage devices. It oversees tasks such as reading and writing data pages to and from disk.
+The Disk Manager facilitates interactions between the buffer pool and the disk, It manages the Directory page, Row Pages, and headers stored in the disk.
 
 ### Disk Scheduler
 
@@ -25,8 +25,8 @@ The Disk Scheduler optimizes the order of disk operations to minimize seek times
 
 ### Directory Page
 
-Directory pages maintain a hierarchical structure for efficiently locating data within the database. They store metadata about the organization of data pages, facilitating quick access to relevant information.
+I changed the design of the directory page from EXTENDIBLE HASH INDEX to a B+ Tree, which compressed storage and allowed for range searches.
 
 ### Row Pages
 
-Row pages store actual data records within the database. They organize data in a format suitable for efficient retrieval and manipulation operations.
+Row pages store actual data records within the database. I used a hashmap for it since each page could only hold 50 entries of JSON data, if I was to store it as bytes I would use a different data structure.
