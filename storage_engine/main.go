@@ -16,12 +16,6 @@ const (
 	numWorkers = 3
 )
 
-type BufferReq struct {
-	Operation string
-	PageID    storage.PageID
-	Data      []storage.Row
-}
-
 func main() {
 	DB, err := storage.InitDatabase(k, fileName, HeaderSize)
 	if err != nil {
