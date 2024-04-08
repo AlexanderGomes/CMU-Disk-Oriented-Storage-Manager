@@ -2,6 +2,8 @@ package main
 
 import (
 	"disk-db/query-engine"
+	"disk-db/storage"
+	//"disk-db/storage"
 	"fmt"
 )
 
@@ -9,20 +11,26 @@ const (
 	HeaderSize = 8
 	k          = 2
 	fileName   = "DB-file"
-	rowsLimit  = 50
-	numWorkers = 3
+	numWorkers = 2
 )
 
 func main() {
+	DB, _ := storage.InitDatabase(k, fileName, HeaderSize, numWorkers)
+
 	sql := `
-	INSERT INTO employees (employee_id, name, department_id, city)
-      VALUES (1, 'John Doe', 101, 'New York'),
-       (2, 'Jane Smith', 102, 'Los Angeles'),
-       (3, 'Michael Johnson', 101, 'Chicago');
+	INSERT INTO user (ID, Name, Age) VALUES (1, 'John Doe', 30);
 	`
-	tree, err := queryengine.Parser(sql)
+	parsedSQL, err := queryengine.Parser(sql)
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Print(tree)
+	fmt.Println("PARSED QUERY:", parsedSQL)
+
+	queryPlan, _ := queryengine.GenerateQueryPlan(parsedSQL)
+	fmt.Println("QUERY PLAN:", queryPlan)
+
+	queryResult, _ := queryengine.ExecuteQueryPlan(queryPlan, parsedSQL, DB)
+	fmt.Print("QUERY RESULT:", queryResult.Message)
+
+	select {}
 }

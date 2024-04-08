@@ -2,9 +2,8 @@ package queryengine
 
 import (
 	"fmt"
-	"strings"
-
 	"github.com/xwb1989/sqlparser"
+	"strings"
 )
 
 type ParsedQuery struct {
@@ -27,7 +26,7 @@ type Join struct {
 func Parser(query string) (*ParsedQuery, error) {
 	stmt, err := sqlparser.Parse(query)
 	if err != nil {
-		fmt.Println("Error parsing SQL:", err)
+		return nil, err
 	}
 
 	parsedQuery := &ParsedQuery{}
@@ -39,6 +38,8 @@ func Parser(query string) (*ParsedQuery, error) {
 			col, ok := expr.(*sqlparser.AliasedExpr)
 			if ok {
 				parsedQuery.ColumnsSelected = append(parsedQuery.ColumnsSelected, col.Expr.(*sqlparser.ColName).Name.String())
+			} else {
+				parsedQuery.ColumnsSelected = append(parsedQuery.ColumnsSelected, "*")
 			}
 		}
 
@@ -51,7 +52,6 @@ func Parser(query string) (*ParsedQuery, error) {
 					if ok {
 						parsedQuery.TableReferences = append(parsedQuery.TableReferences, tableName.Name.String())
 					}
-
 				case *sqlparser.JoinTableExpr:
 					table1, table2 := extractJoinTables(n)
 

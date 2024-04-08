@@ -37,6 +37,10 @@ type BufferPoolManager struct {
 	mu          sync.Mutex
 }
 
+func (bpm *BufferPoolManager) AddReq(req BufferReq) {
+	bpm.AccessChan <- req
+}
+
 func (bpm *BufferPoolManager) Worker() {
 	for req := range bpm.AccessChan {
 		var result BufferRes
@@ -141,34 +145,38 @@ func (bpm *BufferPoolManager) DeletePage(pageID PageID) (FrameID, error) {
 }
 
 func (bpm *BufferPoolManager) FetchPage(pageID PageID) (*Page, error) {
-	var page Page
+	var pagePtr *Page
 	bpm.mu.Lock()
 	defer bpm.mu.Unlock()
 
 	if frameID, ok := bpm.pageTable[pageID]; ok {
-		page = *bpm.Pages[frameID]
-		if page.IsPinned {
+		pagePtr = bpm.Pages[frameID]
+		if pagePtr.IsPinned {
 			return nil, errors.New("Page is pinned, cannot access")
 		}
-		bpm.Pin(page.ID)
+		bpm.Pin(pagePtr.ID)
 	} else {
+		page := Page{
+			ID: pageID,
+		}
+
 		req := DiskReq{
 			Page:      page,
 			Operation: "READ",
 		}
+		
 		bpm.DiskManager.Scheduler.AddReq(req)
-
 		for result := range bpm.DiskManager.Scheduler.ResultChan {
 			if result.Page.ID == pageID {
 				bpm.InsertPage(&result.Page)
 				bpm.Pin(result.Page.ID)
-				page = result.Page
+				pagePtr = &result.Page
 				break
 			}
 		}
 	}
 
-	return &page, nil
+	return pagePtr, nil
 }
 
 func (bpm *BufferPoolManager) Unpin(pageID PageID, isDirty bool) error {
