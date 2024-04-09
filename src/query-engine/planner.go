@@ -6,6 +6,7 @@ type ExecutionPlan struct {
 
 type QueryStep struct {
 	Operation string
+	index     int
 }
 
 func GenerateQueryPlan(parsedQuery *ParsedQuery) (ExecutionPlan, error) {
@@ -26,10 +27,14 @@ func GenerateQueryPlan(parsedQuery *ParsedQuery) (ExecutionPlan, error) {
 
 func SelectTablePlan(executionPlan *ExecutionPlan, P *ParsedQuery) {
 	filterOperation := determineFilterOperation(P.ColumnsSelected)
-
 	querySteps := []QueryStep{
-		{Operation: "GetTable"},
+		{Operation: "GetTable", index: 0},
 		{Operation: filterOperation},
+	}
+
+	if len(P.Joins) > 0 {
+		querySteps = append(querySteps, QueryStep{Operation: "GetTable", index: 1})
+		querySteps = append(querySteps, QueryStep{Operation: "JoinQueryTable"})
 	}
 
 	executionPlan.Steps = append(executionPlan.Steps, querySteps...)

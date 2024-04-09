@@ -56,10 +56,21 @@ func Parser(query string) (*ParsedQuery, error) {
 				case *sqlparser.JoinTableExpr:
 					table1, table2 := extractJoinTables(n)
 
+					var condition string
+					if binaryExpr, ok := n.Condition.On.(*sqlparser.ComparisonExpr); ok {
+						if leftCol, leftOk := binaryExpr.Left.(*sqlparser.ColName); leftOk {
+							if rightCol, rightOk := binaryExpr.Right.(*sqlparser.ColName); rightOk {
+								if leftCol.Name.Equal(rightCol.Name) {
+									condition = leftCol.Name.String() + " = " + rightCol.Name.String()
+								}
+							}
+						}
+					}
+
 					join := Join{
 						LeftTable:  table1,
 						RightTable: table2,
-						Condition:  sqlparser.String(n.Condition.On),
+						Condition:  condition,
 					}
 
 					parsedQuery.Joins = append(parsedQuery.Joins, join)

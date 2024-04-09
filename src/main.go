@@ -16,11 +16,17 @@ const (
 func main() {
 	DB, _ := storage.InitDatabase(k, fileName, HeaderSize, numWorkers)
 
-	sql := `SELECT ID FROM user`
+	sql := `
+	SELECT Name, Age 
+	FROM user 
+	JOIN student ON user.Name = student.Name;
+	`
 	parsedSQL, err := queryengine.Parser(sql)
 	if err != nil {
 		fmt.Println(err)
 	}
+
+	fmt.Println(parsedSQL)
 
 	queryPlan, _ := queryengine.GenerateQueryPlan(parsedSQL)
 

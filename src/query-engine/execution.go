@@ -4,6 +4,7 @@ import (
 	"disk-db/storage"
 	"fmt"
 	"hash/fnv"
+	"strings"
 )
 
 type Query struct {
@@ -17,7 +18,7 @@ func ExecuteQueryPlan(qp ExecutionPlan, P *ParsedQuery, bpm *storage.BufferPoolM
 	for _, steps := range qp.Steps {
 		switch steps.Operation {
 		case "GetTable":
-			page = GetTable(P, &query, bpm)
+			page = GetTable(P, &query, bpm, steps)
 		case "GetAllColumns":
 			GetAllColumns(page, &query)
 		case "FilterByColumns":
@@ -26,10 +27,35 @@ func ExecuteQueryPlan(qp ExecutionPlan, P *ParsedQuery, bpm *storage.BufferPoolM
 			InsertRows(P, &query, bpm)
 		case "CreateTable":
 			CreateTable(P, &query, bpm)
+		case "JoinQueryTable":
+			JoinTables(&query, page, P.Joins[0].Condition)
 		}
 	}
 
 	return query, nil
+}
+
+func JoinTables(query *Query, page *storage.Page, condition string) {
+	comparisonParts := strings.Split(condition, "=")
+	leftColumn := strings.TrimSpace(comparisonParts[0])
+	rightColumn := strings.TrimSpace(comparisonParts[1])
+
+	var rowSlice []storage.Row
+	for _, pageRow := range page.Rows {
+		pageValue := pageRow.Values[rightColumn]
+
+		for _, queryRow := range query.Result {
+			queryValue := queryRow.Values[leftColumn]
+
+			if pageValue == queryValue {
+				rowSlice = append(rowSlice, pageRow)
+				rowSlice = append(rowSlice, queryRow)
+				break
+			}
+		}
+	}
+
+	query.Result = rowSlice
 }
 
 func FilterByColumns(page *storage.Page, query *Query, P *ParsedQuery) {
@@ -53,8 +79,8 @@ func GetAllColumns(page *storage.Page, query *Query) {
 	query.Message = "SUCCESS"
 }
 
-func GetTable(parsedQuery *ParsedQuery, query *Query, bpm *storage.BufferPoolManager) *storage.Page {
-	pageID, _ := hashTableName(parsedQuery.TableReferences[0])
+func GetTable(parsedQuery *ParsedQuery, query *Query, bpm *storage.BufferPoolManager, step QueryStep) *storage.Page {
+	pageID, _ := hashTableName(parsedQuery.TableReferences[step.index])
 	page, err := bpm.FetchPage(storage.PageID(pageID))
 	if err != nil {
 		fmt.Println(err)
@@ -111,7 +137,7 @@ func CreatePage(pageId uint64, query *Query, bpm *storage.BufferPoolManager, P *
 		row.Values[colum] = types.(string)
 	}
 
-	page.Rows[row.Values["0"]] = row
+	page.Rows["typeID"] = row
 
 	req := storage.DiskReq{
 		Page:      page,
