@@ -91,15 +91,15 @@ func (bpm *BufferPoolManager) CreateAndInsertPage(data []Row, ID PageID) error {
 
 func InsertRows(data []Row, page *Page) {
 	for _, row := range data {
-		var id string
 		for key, value := range row.Values {
+			var id string
 			if key == "ID" {
 				id = value
+				row := Row{Values: row.Values}
+				page.Rows[id] = row
 				break
 			}
 		}
-		row := Row{Values: row.Values}
-		page.Rows[id] = row
 	}
 }
 
@@ -164,7 +164,7 @@ func (bpm *BufferPoolManager) FetchPage(pageID PageID) (*Page, error) {
 			Page:      page,
 			Operation: "READ",
 		}
-		
+
 		bpm.DiskManager.Scheduler.AddReq(req)
 		for result := range bpm.DiskManager.Scheduler.ResultChan {
 			if result.Page.ID == pageID {

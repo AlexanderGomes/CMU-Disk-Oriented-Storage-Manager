@@ -1,16 +1,17 @@
 package queryengine
 
 import (
+	"disk-db/storage"
 	"fmt"
+
 	"github.com/xwb1989/sqlparser"
-	"strings"
 )
 
 type ParsedQuery struct {
 	SQLStatementType string
 	TableReferences  []string
 	ColumnsSelected  []string
-	Predicates       []string
+	Predicates       []interface{}
 	Joins            []Join
 	GroupBy          string
 	OrderBy          string
@@ -106,11 +107,13 @@ func Parser(query string) (*ParsedQuery, error) {
 		}
 
 		for _, row := range rows {
-			var values []string
-			for _, valExpr := range row {
-				values = append(values, sqlparser.String(valExpr))
+			currRow := storage.Row{Values: make(map[string]string)}
+			for i, valExpr := range row {
+				key := parsedQuery.ColumnsSelected[i]
+				value := sqlparser.String(valExpr)
+				currRow.Values[key] = value
 			}
-			parsedQuery.Predicates = append(parsedQuery.Predicates, strings.Join(values, ", "))
+			parsedQuery.Predicates = append(parsedQuery.Predicates, currRow)
 		}
 
 	default:

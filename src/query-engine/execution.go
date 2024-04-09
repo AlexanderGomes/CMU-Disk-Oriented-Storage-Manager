@@ -13,18 +13,17 @@ type Query struct {
 
 func ExecuteQueryPlan(qp ExecutionPlan, P *ParsedQuery, bpm *storage.BufferPoolManager) (Query, error) {
 	query := Query{}
-
+	var page *storage.Page
 	for _, steps := range qp.Steps {
 		switch steps.Operation {
 		case "GetTable":
-
+			page = GetTable(P, &query, bpm)
 		case "GetAllColumns":
-
+			GetAllColumns(page, &query)
 		case "FilterByColumns":
-
+			FilterByColumns(page, &query, P)
 		case "InsertRows":
 			InsertRows(P, &query, bpm)
-
 		case "CreateTable":
 			CreateTable(P, &query, bpm)
 		}
@@ -33,10 +32,58 @@ func ExecuteQueryPlan(qp ExecutionPlan, P *ParsedQuery, bpm *storage.BufferPoolM
 	return query, nil
 }
 
+func FilterByColumns(page *storage.Page, query *Query, P *ParsedQuery) {
+	for _, row := range page.Rows {
+		filteredRow := storage.Row{Values: make(map[string]string)}
+
+		for _, columnName := range P.ColumnsSelected {
+			if value, ok := row.Values[columnName]; ok {
+				filteredRow.Values[columnName] = value
+			}
+		}
+
+		query.Result = append(query.Result, filteredRow)
+	}
+}
+
+func GetAllColumns(page *storage.Page, query *Query) {
+	for _, val := range page.Rows {
+		query.Result = append(query.Result, val)
+	}
+	query.Message = "SUCCESS"
+}
+
+func GetTable(parsedQuery *ParsedQuery, query *Query, bpm *storage.BufferPoolManager) *storage.Page {
+	pageID, _ := hashTableName(parsedQuery.TableReferences[0])
+	page, err := bpm.FetchPage(storage.PageID(pageID))
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return page
+}
+
 func InsertRows(parsedQuery *ParsedQuery, query *Query, bpm *storage.BufferPoolManager) {
 	pageID, _ := hashTableName(parsedQuery.TableReferences[0])
 	page, _ := bpm.FetchPage(storage.PageID(pageID))
-	fmt.Println(*page, "got the page")
+
+	for _, rowInterface := range parsedQuery.Predicates {
+		val := rowInterface.(storage.Row)
+		for key, value := range val.Values {
+			if key == "ID" {
+				page.Rows[value] = val
+				break
+			}
+		}
+	}
+
+	req := storage.DiskReq{
+		Page:      *page,
+		Operation: "WRITE",
+	}
+
+	bpm.DiskManager.Scheduler.AddReq(req)
+	query.Message = "INSERTED"
 }
 
 func CreateTable(parsedQuery *ParsedQuery, query *Query, bpm *storage.BufferPoolManager) {
@@ -61,10 +108,10 @@ func CreatePage(pageId uint64, query *Query, bpm *storage.BufferPoolManager, P *
 	for i := 0; i < len(P.ColumnsSelected); i++ {
 		colum := P.ColumnsSelected[i]
 		types := P.Predicates[i]
-		row.Values[colum] = types
+		row.Values[colum] = types.(string)
 	}
 
-	page.Rows[row.Values["ID"]] = row
+	page.Rows[row.Values["0"]] = row
 
 	req := storage.DiskReq{
 		Page:      page,
