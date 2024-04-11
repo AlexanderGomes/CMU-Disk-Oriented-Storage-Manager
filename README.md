@@ -18,7 +18,7 @@ The most exciting part of the project:
 
 ### Buffer Pool Manager
 
-The Buffer Pool Manager manages the memory used for caching data pages. It ensures efficient utilization of memory resources and optimizes data retrieval operations.
+The Buffer Pool Manager handles memory used for caching data pages, making sure memory is used efficiently and cutting down how often it needs to fetch data from the disk.
 
 ### Replacer
 
