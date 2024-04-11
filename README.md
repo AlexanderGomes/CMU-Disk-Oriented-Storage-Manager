@@ -8,9 +8,17 @@ This project serves as a practical application of the knowledge I gained from th
 
 ## Components
 
+### Query Engine
+The most exciting part of the project:
+- [x] parsing SQL queries.
+- [x] creating a rule-based planner.
+- [x] optimizing algorithms for better query execution.
+- [x] gracefully handling process termination so all changes made to the buffer pool don't get lost.
+- [x] creating thread-safe code for manipulating hundreds of pages with many different queries.
+
 ### Buffer Pool Manager
 
-The Buffer Pool Manager plays a crucial role in managing the memory used for caching data pages. It ensures efficient utilization of memory resources and optimizes data retrieval operations.
+The Buffer Pool Manager manages the memory used for caching data pages. It ensures efficient utilization of memory resources and optimizes data retrieval operations.
 
 ### Replacer
 
