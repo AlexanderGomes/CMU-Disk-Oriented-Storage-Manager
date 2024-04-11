@@ -1,7 +1,7 @@
 # CMU Storage Engine
 
 ## Motive
-This project serves as a practical application of the knowledge I gained from the "Intro To Database Systems - CMU" course.
+This project serves as a practical application of the knowledge I gained from the "Intro To Database Systems - CMU" course, I decided to build my own implementation from scratch.
 
 ## Future Changes
 - [x] create a query engine, adding SQL support to the storage engine, implementing the concepts I learned when it comes to query optimization and execution.
