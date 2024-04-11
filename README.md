@@ -44,6 +44,7 @@ Row pages store actual data records within the database. I used a hashmap for it
 
 ## How to Run the Project
 just download the source code and run it on the terminal
+- go mod tidy
 - go run main.go
 
 you will see pages getting created, accessed and evicted to the DB-file.
