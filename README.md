@@ -4,9 +4,7 @@
 This project serves as a practical application of the knowledge I gained from the "Intro To Database Systems - CMU" course.
 
 ## Future Changes
-- [ ] create a query engine in C++, adding SQL support to the storage engine, implementing the concepts I learned when it comes to query optimization and execution.
-
-- [ ] Do the one billion rows challenge and analyze what changes need to be made to my storage and query engine to efficiently store and retrieve such a quantity of rows.
+- [x] create a query engine, adding SQL support to the storage engine, implementing the concepts I learned when it comes to query optimization and execution.
 
 ## Components
 

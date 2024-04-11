@@ -4,7 +4,9 @@ import (
 	"disk-db/storage"
 	"fmt"
 	"hash/fnv"
+	"os"
 	"strings"
+	"text/tabwriter"
 )
 
 type Query struct {
@@ -12,19 +14,22 @@ type Query struct {
 	Message string
 }
 
-func ExecuteQueryPlan(qp ExecutionPlan, P *ParsedQuery, bpm *storage.BufferPoolManager) (Query, error) {
+func ExecuteQueryPlan(qp ExecutionPlan, P *ParsedQuery, bpm *storage.BufferPoolManager) error {
 	query := Query{}
 	var page *storage.Page
+	keys := []string{}
+	pageIds := []storage.PageID{}
+
 	for _, steps := range qp.Steps {
 		switch steps.Operation {
 		case "GetTable":
-			page = GetTable(P, &query, bpm, steps)
+			page = GetTable(P, bpm, steps, &keys, &pageIds)
 		case "GetAllColumns":
 			GetAllColumns(page, &query)
 		case "FilterByColumns":
 			FilterByColumns(page, &query, P)
 		case "InsertRows":
-			InsertRows(P, &query, bpm)
+			InsertRows(P, &query, bpm, page)
 		case "CreateTable":
 			CreateTable(P, &query, bpm)
 		case "JoinQueryTable":
@@ -32,26 +37,60 @@ func ExecuteQueryPlan(qp ExecutionPlan, P *ParsedQuery, bpm *storage.BufferPoolM
 		}
 	}
 
-	return query, nil
+	FreePages(bpm, &pageIds)
+	FormatQueryResult(&query, &keys)
+	return nil
+}
+
+func FreePages(bpm *storage.BufferPoolManager, ids *[]storage.PageID) {
+	for _, id := range *ids {
+		bpm.Unpin(id, true)
+	}
+}
+
+func FormatQueryResult(query *Query, keys *[]string) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.AlignRight|tabwriter.Debug)
+
+	for _, column := range *keys {
+		fmt.Fprintf(w, "      %s   |", column)
+	}
+	fmt.Fprintln(w, "")
+
+	for range *keys {
+		fmt.Fprintf(w, "--------|--------|")
+	}
+	fmt.Fprintln(w, "")
+
+	for _, row := range query.Result {
+		for _, column := range *keys {
+			value := row.Values[column]
+			fmt.Fprintf(w, "%s\t|", value)
+		}
+		fmt.Fprintln(w, "")
+	}
+
+	fmt.Println(query.Message)
+
+	w.Flush()
 }
 
 func JoinTables(query *Query, page *storage.Page, condition string) {
 	comparisonParts := strings.Split(condition, "=")
-	leftColumn := strings.TrimSpace(comparisonParts[0])
-	rightColumn := strings.TrimSpace(comparisonParts[1])
+	leftTableCondition := strings.TrimSpace(comparisonParts[0])
+	rightTableCondition := strings.TrimSpace(comparisonParts[1])
+
+	queryRowsMap := make(map[string]storage.Row)
+	for _, queryRow := range query.Result {
+		queryValue := queryRow.Values[leftTableCondition]
+		queryRowsMap[queryValue] = queryRow
+	}
 
 	var rowSlice []storage.Row
 	for _, pageRow := range page.Rows {
-		pageValue := pageRow.Values[rightColumn]
+		pageValue := pageRow.Values[rightTableCondition]
 
-		for _, queryRow := range query.Result {
-			queryValue := queryRow.Values[leftColumn]
-
-			if pageValue == queryValue {
-				rowSlice = append(rowSlice, pageRow)
-				rowSlice = append(rowSlice, queryRow)
-				break
-			}
+		if queryRow, ok := queryRowsMap[pageValue]; ok {
+			rowSlice = append(rowSlice, pageRow, queryRow)
 		}
 	}
 
@@ -79,37 +118,39 @@ func GetAllColumns(page *storage.Page, query *Query) {
 	query.Message = "SUCCESS"
 }
 
-func GetTable(parsedQuery *ParsedQuery, query *Query, bpm *storage.BufferPoolManager, step QueryStep) *storage.Page {
+func GetTable(parsedQuery *ParsedQuery, bpm *storage.BufferPoolManager, step QueryStep, keys *[]string, ids *[]storage.PageID) *storage.Page {
 	pageID, _ := hashTableName(parsedQuery.TableReferences[step.index])
 	page, err := bpm.FetchPage(storage.PageID(pageID))
 	if err != nil {
 		fmt.Println(err)
+		return nil
+	}
+
+	*ids = append(*ids, page.ID)
+
+	for _, rows := range page.Rows {
+		for key := range rows.Values {
+			*keys = append(*keys, key)
+		}
+		break
 	}
 
 	return page
 }
 
-func InsertRows(parsedQuery *ParsedQuery, query *Query, bpm *storage.BufferPoolManager) {
-	pageID, _ := hashTableName(parsedQuery.TableReferences[0])
-	page, _ := bpm.FetchPage(storage.PageID(pageID))
-
+func InsertRows(parsedQuery *ParsedQuery, query *Query, bpm *storage.BufferPoolManager, page *storage.Page) {
 	for _, rowInterface := range parsedQuery.Predicates {
 		val := rowInterface.(storage.Row)
 		for key, value := range val.Values {
-			if key == "ID" {
+			if key == "ID" || key == "id" {
 				page.Rows[value] = val
 				break
 			}
 		}
 	}
 
-	req := storage.DiskReq{
-		Page:      *page,
-		Operation: "WRITE",
-	}
-
-	bpm.DiskManager.Scheduler.AddReq(req)
-	query.Message = "INSERTED"
+	query.Message = "ROWS INSERTED"
+	bpm.InsertPage(page)
 }
 
 func CreateTable(parsedQuery *ParsedQuery, query *Query, bpm *storage.BufferPoolManager) {

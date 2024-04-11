@@ -33,8 +33,7 @@ func SelectTablePlan(executionPlan *ExecutionPlan, P *ParsedQuery) {
 	}
 
 	if len(P.Joins) > 0 {
-		querySteps = append(querySteps, QueryStep{Operation: "GetTable", index: 1})
-		querySteps = append(querySteps, QueryStep{Operation: "JoinQueryTable"})
+		querySteps = append(querySteps, QueryStep{Operation: "GetTable", index: 1}, QueryStep{Operation: "JoinQueryTable"})
 	}
 
 	executionPlan.Steps = append(executionPlan.Steps, querySteps...)
@@ -42,6 +41,7 @@ func SelectTablePlan(executionPlan *ExecutionPlan, P *ParsedQuery) {
 
 func InsertTablePlan(executionPlan *ExecutionPlan, P *ParsedQuery) {
 	querySteps := []QueryStep{
+		{Operation: "GetTable", index: 0},
 		{Operation: "InsertRows"},
 	}
 

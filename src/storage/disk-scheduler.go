@@ -32,22 +32,21 @@ type DiskScheduler struct {
 func (ds *DiskScheduler) ProccessReq() {
 	for req := range ds.RequestChan {
 		var result DiskResult
+		fmt.Println(req)
 
 		if req.Operation == "WRITE" {
+			fmt.Println(req, "here")
 			err := ds.WriteToDisk(req)
 			result.Page.ID = req.Page.ID
 			if err != nil {
 				result.Response = errors.New("unable to write to disk: " + err.Error())
 			}
-
-			result.Response = nil
 		} else {
 			page, err := ds.ReadFromDisk(req.Page.ID)
 			result.Page = page
 			if err != nil {
 				result.Response = errors.New("unable to read from disk: " + err.Error())
 			}
-			result.Response = nil
 		}
 
 		select {
@@ -60,6 +59,11 @@ func (ds *DiskScheduler) ProccessReq() {
 
 func (ds *DiskScheduler) ReadFromDisk(ID PageID) (Page, error) {
 	offset := ds.DiskManager.DirectoryPage.Mapping[ID]
+
+	if offset == 0 {
+		return Page{}, errors.New("TABLE NOT FOUND")
+	}
+
 	pageBytes := make([]byte, PageSize)
 	var page Page
 

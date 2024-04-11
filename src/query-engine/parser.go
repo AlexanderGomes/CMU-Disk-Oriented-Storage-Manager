@@ -13,9 +13,6 @@ type ParsedQuery struct {
 	ColumnsSelected  []string
 	Predicates       []interface{}
 	Joins            []Join
-	GroupBy          string
-	OrderBy          string
-	Limit            string
 }
 
 type Join struct {
@@ -77,22 +74,6 @@ func Parser(query string) (*ParsedQuery, error) {
 				}
 				return true, nil
 			}, stmt.From)
-		}
-
-		if stmt.Where != nil {
-			parsedQuery.Predicates = append(parsedQuery.Predicates, sqlparser.String(stmt.Where.Expr))
-		}
-
-		if stmt.GroupBy != nil {
-			parsedQuery.GroupBy = sqlparser.String(stmt.GroupBy)
-		}
-
-		if stmt.OrderBy != nil {
-			parsedQuery.OrderBy = sqlparser.String(stmt.OrderBy)
-		}
-
-		if stmt.Limit != nil {
-			parsedQuery.Limit = sqlparser.String(stmt.Limit)
 		}
 
 	case *sqlparser.DDL:

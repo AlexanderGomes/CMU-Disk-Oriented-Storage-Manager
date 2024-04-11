@@ -4,7 +4,7 @@ import (
 	"log"
 )
 
-func InitDatabase(k int, fileName string, headerSize int, numWorkers int) (*BufferPoolManager, error) {
+func InitDatabase(k int, fileName string, headerSize int) (*BufferPoolManager, error) {
 	bufferPool, err := NewBufferPoolManager(k, fileName, headerSize)
 	if err != nil {
 		log.Println("Error initializing database:")

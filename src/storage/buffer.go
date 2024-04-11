@@ -3,8 +3,6 @@ package storage
 import (
 	"errors"
 	"fmt"
-	"log"
-	"sync"
 )
 
 const (
@@ -32,80 +30,24 @@ type BufferPoolManager struct {
 	pageTable   map[PageID]FrameID
 	Replacer    *LRUKReplacer
 	DiskManager *DiskManager
-	AccessChan  chan BufferReq
-	ResultChan  chan BufferRes
-	mu          sync.Mutex
 }
 
-func (bpm *BufferPoolManager) AddReq(req BufferReq) {
-	bpm.AccessChan <- req
-}
-
-func (bpm *BufferPoolManager) Worker() {
-	for req := range bpm.AccessChan {
-		var result BufferRes
-
-		switch req.Operation {
-		case FetchPage:
-			pagePtr, err := bpm.FetchPage(req.PageID)
-			if err != nil {
-				result.Error = errors.New("unable to fetch page: " + err.Error())
-			}
-
-			result.PageID = req.PageID
-			result.PagePtr = pagePtr
-
-		case InsertData:
-			err := bpm.CreateAndInsertPage(req.Data, req.PageID)
-			if err != nil {
-				result.Error = errors.New("unable to write page: " + err.Error())
-			}
-			result.PageID = req.PageID
-		default:
-			fmt.Println("invalid request")
+func (bpm *BufferPoolManager) FlushAll() {
+	for _, FrameID := range bpm.pageTable {
+		page := bpm.Pages[FrameID]
+		req := DiskReq{
+			Page:      *page,
+			Operation: "WRITE",
 		}
-
-		select {
-		case bpm.ResultChan <- result:
-		default:
-			fmt.Println("No listener for result")
-		}
-	}
-}
-
-func (bpm *BufferPoolManager) CreateAndInsertPage(data []Row, ID PageID) error {
-	page := &Page{
-		ID:   ID,
-		Rows: make(map[string]Row),
-	}
-
-	InsertRows(data, page)
-
-	err := bpm.InsertPage(page)
-	if err != nil {
-		log.Print(err)
-	}
-
-	return nil
-}
-
-func InsertRows(data []Row, page *Page) {
-	for _, row := range data {
-		for key, value := range row.Values {
-			var id string
-			if key == "ID" {
-				id = value
-				row := Row{Values: row.Values}
-				page.Rows[id] = row
-				break
-			}
-		}
+		bpm.DiskManager.Scheduler.WriteToDisk(req)
 	}
 }
 
 func (bpm *BufferPoolManager) InsertPage(page *Page) error {
 	if len(bpm.freeList) == 0 {
-		return nil
+		for i := 0; i < 20; i++ {
+			bpm.Evict()
+		}
 	}
 	frameID := bpm.freeList[0]
 	bpm.freeList = bpm.freeList[1:]
@@ -130,7 +72,8 @@ func (bpm *BufferPoolManager) Evict() error {
 
 	bpm.DiskManager.Scheduler.AddReq(req)
 	bpm.DeletePage(page.ID)
-	fmt.Println("EVICTED")
+
+	fmt.Println("PAGE EVICTED:", page.ID)
 	return nil
 }
 
@@ -146,15 +89,12 @@ func (bpm *BufferPoolManager) DeletePage(pageID PageID) (FrameID, error) {
 
 func (bpm *BufferPoolManager) FetchPage(pageID PageID) (*Page, error) {
 	var pagePtr *Page
-	bpm.mu.Lock()
-	defer bpm.mu.Unlock()
 
 	if frameID, ok := bpm.pageTable[pageID]; ok {
 		pagePtr = bpm.Pages[frameID]
 		if pagePtr.IsPinned {
 			return nil, errors.New("Page is pinned, cannot access")
 		}
-		bpm.Pin(pagePtr.ID)
 	} else {
 		page := Page{
 			ID: pageID,
@@ -167,6 +107,10 @@ func (bpm *BufferPoolManager) FetchPage(pageID PageID) (*Page, error) {
 
 		bpm.DiskManager.Scheduler.AddReq(req)
 		for result := range bpm.DiskManager.Scheduler.ResultChan {
+			if result.Response != nil {
+				return nil, result.Response
+			}
+
 			if result.Page.ID == pageID {
 				bpm.InsertPage(&result.Page)
 				bpm.Pin(result.Page.ID)
@@ -176,6 +120,7 @@ func (bpm *BufferPoolManager) FetchPage(pageID PageID) (*Page, error) {
 		}
 	}
 
+	bpm.Pin(pagePtr.ID)
 	return pagePtr, nil
 }
 
@@ -217,8 +162,5 @@ func NewBufferPoolManager(k int, fileName string, headerSize int) (*BufferPoolMa
 		return nil, err
 	}
 
-	accessChan := make(chan BufferReq)
-	resultChan := make(chan BufferRes)
-
-	return &BufferPoolManager{pages, freeList, pageTable, replacer, diskManager, accessChan, resultChan, sync.Mutex{}}, nil
+	return &BufferPoolManager{pages, freeList, pageTable, replacer, diskManager}, nil
 }
