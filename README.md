@@ -1,4 +1,5 @@
 # CMU Storage Engine
+disk-oriented storage manager with SQL query support
 
 ## Motive
 This project serves as a practical application of the knowledge I gained from the "Intro To Database Systems - CMU" course, I decided to build my own implementation from scratch.
