@@ -1,5 +1,6 @@
 package storage
 
+// not being used right now
 type DirectoryPageTree struct {
 	tree BPlusTree
 }

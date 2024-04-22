@@ -35,7 +35,7 @@ func NewDiskManager(filename string, headerSize int64) (*DiskManager, error) {
 		return nil, err
 	}
 
-	if err := dm.loadOrCreateDirectoryPage(); err != nil {
+	if err = dm.loadOrCreateDirectoryPage(); err != nil {
 		return nil, err
 	}
 
