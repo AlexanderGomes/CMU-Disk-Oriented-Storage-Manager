@@ -1,16 +1,25 @@
 # CMU Storage Engine
+disk-oriented storage manager with SQL query support
 
 ## Motive
-This project serves as a practical application of the knowledge I gained from the "Intro To Database Systems - CMU" course.
+This project serves as a practical application of the knowledge I gained from the "Intro To Database Systems - CMU" course, I decided to build my own implementation from scratch.
 
 ## Future Changes
 - [x] create a query engine, adding SQL support to the storage engine, implementing the concepts I learned when it comes to query optimization and execution.
 
 ## Components
 
+### Query Engine
+The most exciting part of the project:
+- [x] parsing SQL queries.
+- [x] creating a rule-based planner.
+- [x] optimizing algorithms for better query execution.
+- [x] gracefully handling process termination so all changes made to the buffer pool don't get lost.
+- [x] creating thread-safe code for manipulating hundreds of pages with many different queries.
+
 ### Buffer Pool Manager
 
-The Buffer Pool Manager plays a crucial role in managing the memory used for caching data pages. It ensures efficient utilization of memory resources and optimizes data retrieval operations.
+The Buffer Pool Manager handles memory used for caching data pages, making sure memory is used efficiently and cutting down how often it needs to fetch data from the disk.
 
 ### Replacer
 
@@ -36,6 +45,7 @@ Row pages store actual data records within the database. I used a hashmap for it
 
 ## How to Run the Project
 just download the source code and run it on the terminal
+- go mod tidy
 - go run main.go
 
 you will see pages getting created, accessed and evicted to the DB-file.
