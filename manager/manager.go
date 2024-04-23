@@ -3,16 +3,14 @@ package manager
 import (
 	"encoding/json"
 	"fmt"
-	"net"
 	"os/exec"
 	"strconv"
 	"sync"
-	"time"
 )
 
 type Node struct {
-	TCPcon   int
-	HeartCon int
+	RPCcon   string
+	HeartCon string
 	PID      int
 	FileName string
 	isLeader bool
@@ -20,34 +18,12 @@ type Node struct {
 
 type Manager struct {
 	Leader *Node
-	copies []*Node
+	Copies []*Node
 }
 
-func (m *Manager) HeartBeat(port int) {
-	go func() {
-		ticker := time.Tick(4 * time.Second)
-		for range ticker {
-			if m.Leader.TCPcon != port {
-				conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", m.Leader.HeartCon))
-				if err != nil {
-					fmt.Println(err)
-				}
-
-				heartbeatMsg := []byte("heartbeat")
-
-				_, errr := conn.Write(heartbeatMsg)
-				if errr != nil {
-					fmt.Println(errr)
-				}
-			}
-
-		}
-	}()
-}
-
-func (m *Manager) CreateNode(tcp int, heartCon int, pid int, file string, isLeader bool) {
+func (m *Manager) CreateNode(rpcCon string, heartCon string, pid int, file string, isLeader bool) {
 	node := &Node{
-		TCPcon:   tcp,
+		RPCcon:   rpcCon,
 		HeartCon: heartCon,
 		PID:      pid,
 		FileName: file,
@@ -59,7 +35,7 @@ func (m *Manager) CreateNode(tcp int, heartCon int, pid int, file string, isLead
 		return
 	}
 
-	m.copies = append(m.copies, node)
+	m.Copies = append(m.Copies, node)
 }
 
 func (m *Manager) InitNodes(program string, wg *sync.WaitGroup) {
@@ -75,8 +51,9 @@ func (m *Manager) InitNodes(program string, wg *sync.WaitGroup) {
 			}
 
 			filename := "DB-" + strconv.Itoa(num)
-			portNum := 8000 + num
-			cmd := exec.Command("go", "run", "main.go", "--filename", filename, "--port", strconv.Itoa(portNum), "--manager", string(managerJSON))
+			rpcPort := ":" + strconv.Itoa(8000+num)
+			heartCon := ":" + strconv.Itoa(8000+num)
+			cmd := exec.Command("go", "run", "main.go", "--filename", filename, "--rpcPort", rpcPort, "--manager", string(managerJSON), "--heartPort", heartCon)
 			cmd.Dir = program
 
 			err = cmd.Start()
@@ -91,12 +68,8 @@ func (m *Manager) InitNodes(program string, wg *sync.WaitGroup) {
 				isLeader = true
 			}
 
-			heartCon := 3000 + num
+			m.CreateNode(rpcPort, heartCon, cmd.Process.Pid, filename, isLeader)
 
-			m.CreateNode(portNum, heartCon, cmd.Process.Pid, filename, isLeader)
-
-			fmt.Println(m.Leader, "LEADER")
-			fmt.Println(m.copies, "copies")
 			err = cmd.Wait()
 			if err != nil {
 				fmt.Println(err.Error())

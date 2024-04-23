@@ -4,15 +4,15 @@ import (
 	"context"
 	m "disk-db/manager"
 	"disk-db/pb"
-	"disk-db/query-engine"
+	queryengine "disk-db/query-engine"
 	"disk-db/storage"
+	"disk-db/tcp"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 
 	"google.golang.org/grpc"
@@ -32,15 +32,15 @@ func (s *Server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRe
 }
 
 func main() {
-	filename, port, _ := GetCommandLineInputs()
-	// if you're not the leader send heartbeats
-	storage.InitDatabase(k, filename, HeaderSize)
-	StartRpcServer(port)
+	_, rpcPort, _, heartPort := GetCommandLineInputs()
+	s := tcp.NewServer(heartPort)
+	go s.Start()
+	StartRpcServer(rpcPort)
 }
 
-func StartRpcServer(port int) {
+func StartRpcServer(port string) {
 	println("Running RPC Server")
-	lis, _ := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
+	lis, _ := net.Listen("tcp", port)
 
 	s := grpc.NewServer()
 	pb.RegisterHelloServer(s, &Server{})
@@ -50,10 +50,11 @@ func StartRpcServer(port int) {
 	}
 }
 
-func GetCommandLineInputs() (string, int, *m.Manager) {
+func GetCommandLineInputs() (string, string, *m.Manager, string) {
 	args := os.Args[1:]
 	var fileName string
-	var port int
+	var rpcPort string
+	var heartPort string
 	var managerJSON string
 
 	for i := 0; i < len(args); i++ {
@@ -62,9 +63,13 @@ func GetCommandLineInputs() (string, int, *m.Manager) {
 			if i+1 < len(args) {
 				fileName = args[i+1]
 			}
-		case "--port":
+		case "--rpcPort":
 			if i+1 < len(args) {
-				port, _ = strconv.Atoi(args[i+1])
+				rpcPort = args[i+1]
+			}
+		case "--heartPort":
+			if i+1 < len(args) {
+				heartPort = args[i+1]
 			}
 		case "--manager":
 			if i+1 < len(args) {
@@ -81,7 +86,7 @@ func GetCommandLineInputs() (string, int, *m.Manager) {
 		}
 	}
 
-	return fileName, port, manager
+	return fileName, rpcPort, manager, heartPort
 }
 
 func ExecuteQuery(sql string, DB *storage.BufferPoolManager) {
