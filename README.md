@@ -6,6 +6,7 @@ This project serves as a practical application of the knowledge I gained from th
 
 ## Future Changes
 - [x] create a query engine, adding SQL support to the storage engine, implementing the concepts I learned when it comes to query optimization and execution.
+- [ ] Learn distributed systems by implementing data replication.
 
 ## Components
 

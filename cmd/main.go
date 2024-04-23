@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
+	m "disk-db/manager"
 	"disk-db/pb"
 	"disk-db/query-engine"
 	"disk-db/storage"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -24,18 +27,21 @@ type Server struct {
 	pb.UnimplementedHelloServer
 }
 
+func (s *Server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloResponse, error) {
+	return &pb.HelloResponse{Message: "Hello" + in.GetName()}, nil
+}
 
 func main() {
-	fileName, port := GetCommandLineInputs()
-	DB, _ := storage.InitDatabase(k, fileName, HeaderSize)
-	fmt.Println(DB)
-
+	filename, port, _ := GetCommandLineInputs()
+	// if you're not the leader send heartbeats
+	storage.InitDatabase(k, filename, HeaderSize)
 	StartRpcServer(port)
 }
 
 func StartRpcServer(port int) {
 	println("Running RPC Server")
 	lis, _ := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
+
 	s := grpc.NewServer()
 	pb.RegisterHelloServer(s, &Server{})
 
@@ -44,10 +50,11 @@ func StartRpcServer(port int) {
 	}
 }
 
-func GetCommandLineInputs() (string, int) {
+func GetCommandLineInputs() (string, int, *m.Manager) {
 	args := os.Args[1:]
 	var fileName string
 	var port int
+	var managerJSON string
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -59,10 +66,22 @@ func GetCommandLineInputs() (string, int) {
 			if i+1 < len(args) {
 				port, _ = strconv.Atoi(args[i+1])
 			}
+		case "--manager":
+			if i+1 < len(args) {
+				managerJSON = args[i+1]
+			}
 		}
 	}
 
-	return fileName, port
+	manager := &m.Manager{}
+	if managerJSON != "" {
+		err := json.Unmarshal([]byte(managerJSON), &manager)
+		if err != nil {
+			fmt.Println("Error parsing manager JSON:", err)
+		}
+	}
+
+	return fileName, port, manager
 }
 
 func ExecuteQuery(sql string, DB *storage.BufferPoolManager) {
