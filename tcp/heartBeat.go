@@ -26,10 +26,10 @@ func (s *Server) Start() error {
 	}
 	defer ln.Close()
 
+	fmt.Println("TCP STARTED")
 	s.ln = ln
 	go s.acceptLoop()
 
-	fmt.Println("TCP STARTED")
 	<-s.quitch
 
 	return nil

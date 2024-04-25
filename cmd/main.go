@@ -13,7 +13,9 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
+	"time"
 
 	"google.golang.org/grpc"
 )
@@ -32,10 +34,31 @@ func (s *Server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRe
 }
 
 func main() {
-	_, rpcPort, _, heartPort := GetCommandLineInputs()
+	_, rpcPort, m, heartPort, _ := GetCommandLineInputs()
+	fmt.Println(len(m.Copies))
+	fmt.Println(m.Leader)
 	s := tcp.NewServer(heartPort)
-	go s.Start()
-	StartRpcServer(rpcPort)
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		s.Start()
+	}()
+
+	go func() {
+		defer wg.Done()
+		StartRpcServer(rpcPort)
+	}()
+
+	wg.Wait()
+}
+
+func Test(manager *m.Manager, node *m.Node) {
+	time.Sleep(10 * time.Second)
+	if node.HeartCon == ":7001" {
+		manager.StartElection(node)
+	}
 }
 
 func StartRpcServer(port string) {
@@ -50,12 +73,13 @@ func StartRpcServer(port string) {
 	}
 }
 
-func GetCommandLineInputs() (string, string, *m.Manager, string) {
+func GetCommandLineInputs() (string, string, *m.Manager, string, *m.Node) {
 	args := os.Args[1:]
 	var fileName string
 	var rpcPort string
 	var heartPort string
 	var managerJSON string
+	var nodeJSON string
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -75,6 +99,10 @@ func GetCommandLineInputs() (string, string, *m.Manager, string) {
 			if i+1 < len(args) {
 				managerJSON = args[i+1]
 			}
+		case "--node":
+			if i+1 < len(args) {
+				nodeJSON = args[i+1]
+			}
 		}
 	}
 
@@ -86,7 +114,15 @@ func GetCommandLineInputs() (string, string, *m.Manager, string) {
 		}
 	}
 
-	return fileName, rpcPort, manager, heartPort
+	node := &m.Node{}
+	if nodeJSON != "" {
+		err := json.Unmarshal([]byte(nodeJSON), &node)
+		if err != nil {
+			fmt.Println("Error parsing manager JSON:", err)
+		}
+	}
+
+	return fileName, rpcPort, manager, heartPort, node
 }
 
 func ExecuteQuery(sql string, DB *storage.BufferPoolManager) {
