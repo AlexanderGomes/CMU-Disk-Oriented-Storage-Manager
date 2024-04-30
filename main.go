@@ -1,7 +1,7 @@
 package main
 
 import (
-	m "disk-db/manager"
+	m "disk-db/Distributed/manager"
 	"encoding/json"
 	"fmt"
 	"time"

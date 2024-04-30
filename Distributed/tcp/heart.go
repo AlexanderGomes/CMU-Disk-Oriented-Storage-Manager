@@ -1,7 +1,7 @@
 package tcp
 
 import (
-	m "disk-db/manager"
+	m "disk-db/Distributed/manager"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -161,9 +161,6 @@ func (s *Server) SetManager(msg m.Message) error {
 
 	manager.Leader = leader
 	manager.Copies = copies
-
-	data, err := json.Marshal(manager)
-	fmt.Println(string(data))
 
 	s.Manager = manager
 	return nil

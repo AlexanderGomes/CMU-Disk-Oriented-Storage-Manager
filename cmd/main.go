@@ -1,14 +1,15 @@
 package main
 
 import (
-	"context"
-	m "disk-db/manager"
-	"disk-db/pb"
-	queryengine "disk-db/query-engine"
-	"disk-db/storage"
-	"disk-db/tcp"
+	queryengine "disk-db/DB/query-engine"
+	"disk-db/DB/storage"
+	m "disk-db/Distributed/manager"
+	"disk-db/Distributed/rpc"
+	"disk-db/Distributed/rpc/pb"
+	"disk-db/Distributed/tcp"
 	"encoding/json"
 	"fmt"
+	"google.golang.org/grpc"
 	"log"
 	"net"
 	"os"
@@ -16,22 +17,12 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"google.golang.org/grpc"
 )
 
 const (
 	HeaderSize = 8
 	k          = 2
 )
-
-type RPCserver struct {
-	pb.UnimplementedHelloServer
-}
-
-func (s *RPCserver) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloResponse, error) {
-	return &pb.HelloResponse{Message: "Hello" + in.GetName()}, nil
-}
 
 func main() {
 	node := GetCommandLineInputs()
@@ -65,7 +56,7 @@ func StartRpcServer(port string) {
 	lis, _ := net.Listen("tcp", port)
 
 	s := grpc.NewServer()
-	pb.RegisterHelloServer(s, &RPCserver{})
+	pb.RegisterHelloServer(s, &rpc.RPCserver{})
 
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("FAILED TO SERVER %v", err)
