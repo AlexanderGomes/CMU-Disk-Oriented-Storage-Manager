@@ -25,22 +25,20 @@ const (
 	k          = 2
 )
 
-type Server struct {
+type RPCserver struct {
 	pb.UnimplementedHelloServer
 }
 
-func (s *Server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloResponse, error) {
+func (s *RPCserver) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloResponse, error) {
 	return &pb.HelloResponse{Message: "Hello" + in.GetName()}, nil
 }
 
 func main() {
-	_, rpcPort, m, heartPort, _ := GetCommandLineInputs()
-	fmt.Println(len(m.Copies))
-	fmt.Println(m.Leader)
-	s := tcp.NewServer(heartPort)
+	node := GetCommandLineInputs()
+	s := tcp.NewServer(node.HeartCon, node)
+
 	var wg sync.WaitGroup
 	wg.Add(2)
-
 	go func() {
 		defer wg.Done()
 		s.Start()
@@ -48,17 +46,18 @@ func main() {
 
 	go func() {
 		defer wg.Done()
-		StartRpcServer(rpcPort)
+		StartRpcServer(node.RPCcon)
 	}()
 
+	time.Sleep(10 * time.Second)
+	s.Manager.StartElection(s.Node)
 	wg.Wait()
 }
 
-func Test(manager *m.Manager, node *m.Node) {
+func Test(m *m.Manager) {
 	time.Sleep(10 * time.Second)
-	if node.HeartCon == ":7001" {
-		manager.StartElection(node)
-	}
+	fmt.Println(m.Copies, "COPIES")
+	fmt.Println(m.Leader, "LEADER")
 }
 
 func StartRpcServer(port string) {
@@ -66,63 +65,32 @@ func StartRpcServer(port string) {
 	lis, _ := net.Listen("tcp", port)
 
 	s := grpc.NewServer()
-	pb.RegisterHelloServer(s, &Server{})
+	pb.RegisterHelloServer(s, &RPCserver{})
 
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("FAILED TO SERVER %v", err)
 	}
 }
 
-func GetCommandLineInputs() (string, string, *m.Manager, string, *m.Node) {
+func GetCommandLineInputs() *m.Node {
 	args := os.Args[1:]
-	var fileName string
-	var rpcPort string
-	var heartPort string
-	var managerJSON string
 	var nodeJSON string
 
 	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--filename":
-			if i+1 < len(args) {
-				fileName = args[i+1]
-			}
-		case "--rpcPort":
-			if i+1 < len(args) {
-				rpcPort = args[i+1]
-			}
-		case "--heartPort":
-			if i+1 < len(args) {
-				heartPort = args[i+1]
-			}
-		case "--manager":
-			if i+1 < len(args) {
-				managerJSON = args[i+1]
-			}
-		case "--node":
-			if i+1 < len(args) {
-				nodeJSON = args[i+1]
-			}
+		if args[i] == "--node" && i+1 < len(args) {
+			nodeJSON = args[i+1]
+			break
 		}
 	}
 
-	manager := &m.Manager{}
-	if managerJSON != "" {
-		err := json.Unmarshal([]byte(managerJSON), &manager)
-		if err != nil {
-			fmt.Println("Error parsing manager JSON:", err)
-		}
+	var node m.Node
+	err := json.Unmarshal([]byte(nodeJSON), &node)
+	if err != nil {
+		fmt.Printf("Error unmarshaling node JSON: %v\n", err)
+		return nil
 	}
 
-	node := &m.Node{}
-	if nodeJSON != "" {
-		err := json.Unmarshal([]byte(nodeJSON), &node)
-		if err != nil {
-			fmt.Println("Error parsing manager JSON:", err)
-		}
-	}
-
-	return fileName, rpcPort, manager, heartPort, node
+	return &node
 }
 
 func ExecuteQuery(sql string, DB *storage.BufferPoolManager) {

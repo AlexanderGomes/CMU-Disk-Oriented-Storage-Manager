@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
-	"sync"
 	"time"
 )
 
@@ -22,18 +21,19 @@ type Node struct {
 	HeartCon   string
 	PID        int
 	FileName   string
-	isLeader   bool
+	IsLeader   bool
 	ProposedId int
 }
 
 type Manager struct {
-	Leader *Node
-	Copies []*Node
-	Paxos  *Paxos
+	Leader    *Node
+	Copies    []*Node
+	Acceptors []*Node
 }
 
 type Prepare struct {
-	proposalID int
+	ProposalID int
+	HeartCon   string
 }
 
 type Promise struct {
@@ -48,113 +48,48 @@ type Propose struct {
 	Value      *Node
 }
 
-type Paxos struct {
-	Proposer   *Node
-	Acceptors  []*Node
-	Learners   []*Node
-	msgChannel chan Message
-}
-
 type Acceptance struct {
 }
 
 func (m *Manager) StartElection(proposer *Node) {
-	m.Paxos = &Paxos{
-		Proposer:   proposer,
-		msgChannel: make(chan Message),
-	}
-
 	quorum := len(m.Copies)/2 + 1
-	fmt.Println(len(m.Copies), "COPIES SIZE")
 	proposalID := int(time.Now().UnixNano())
 	for i := 0; i < quorum; i++ {
 		acceptor := m.Copies[i]
 		message := Message{
 			Type:    "PREPARE",
-			Content: Prepare{proposalID: proposalID},
+			Content: Prepare{ProposalID: proposalID, HeartCon: proposer.HeartCon},
 		}
-
-		go sendMessage(acceptor.HeartCon, message)
+		go SendMessage(acceptor.HeartCon, message)
 	}
-
-	go func() {
-		accepted := 0
-
-	outerLoop:
-		for messages := range m.Paxos.msgChannel {
-			switch messages.Type {
-			case "PROMISE":
-				content := messages.Content.(Promise)
-				m.Paxos.Acceptors = append(m.Paxos.Acceptors, content.Acceptor)
-			case "ACCEPTED":
-				accepted++
-				if accepted == quorum {
-					m.Leader = proposer
-					break outerLoop
-				}
-			}
-
-			if len(m.Paxos.Acceptors) == quorum {
-				for _, node := range m.Paxos.Acceptors {
-					message := Message{
-						Type: "ACCEPT",
-						Content: Propose{
-							Type:       "LEADER ELECTION",
-							ProposalID: proposalID,
-							Value:      proposer,
-						},
-					}
-					sendMessage(node.HeartCon, message)
-				}
-			}
-		}
-	}()
-
 }
 
-func (m *Manager) CreateNode(rpcCon string, heartCon string, file string, isLeader bool) *Node {
-	node := &Node{
+func CreateNode(rpcCon string, heartCon string, file string, isLeader bool) *Node {
+	return &Node{
 		RPCcon:   rpcCon,
 		HeartCon: heartCon,
 		FileName: file,
-		isLeader: isLeader,
+		IsLeader: isLeader,
 	}
-
-	if isLeader {
-		m.Leader = node
-		return node
-	}
-
-	m.Copies = append(m.Copies, node)
-	return node
 }
 
-func (m *Manager) InitNodes(program string, wg *sync.WaitGroup) {
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func(num int) {
-			defer wg.Done()
-
-			managerJSON, err := json.Marshal(m)
-			if err != nil {
-				fmt.Println("Error:", err)
-				return
-			}
-
+func InitNodes(program string, nodesQty int, channel chan []byte) {
+	for i := 0; i < nodesQty; i++ {
+		go func(num int, channel chan []byte) {
 			filename := "DB-" + strconv.Itoa(num)
-			rpcPort := ":" + strconv.Itoa(8000+num)
+			rpcPort := ":" + strconv.Itoa(4000+num)
 			heartCon := ":" + strconv.Itoa(9000+num)
 
 			isLeader := num == 1
-			node := m.CreateNode(rpcPort, heartCon, filename, isLeader)
+			node := CreateNode(rpcPort, heartCon, filename, isLeader)
 
 			nodeJSON, err := json.Marshal(node)
 			if err != nil {
-				fmt.Println("Error:", err)
+				fmt.Printf("Error marshaling node struct for process %d: %v\n", num, err)
 				return
 			}
 
-			cmd := exec.Command("go", "run", "main.go", "--filename", filename, "--rpcPort", rpcPort, "--manager", string(managerJSON), "--heartPort", heartCon, "--node", string(nodeJSON))
+			cmd := exec.Command("go", "run", "main.go", "--node", string(nodeJSON))
 			cmd.Dir = program
 
 			stdout, err := cmd.StdoutPipe()
@@ -188,18 +123,18 @@ func (m *Manager) InitNodes(program string, wg *sync.WaitGroup) {
 				return
 			}
 
-			node.PID = cmd.Process.Pid
+			channel <- nodeJSON
 
 			err = cmd.Wait()
 			if err != nil {
 				fmt.Println(err.Error())
 				return
 			}
-		}(i)
+		}(i, channel)
 	}
 }
 
-func sendMessage(address string, message Message) error {
+func SendMessage(address string, message Message) error {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
 		return err
@@ -211,11 +146,25 @@ func sendMessage(address string, message Message) error {
 		return err
 	}
 
-	_, err = conn.Write([]byte(jsonData))
+	_, err = conn.Write(jsonData)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("Message sent to", address)
 	return nil
+}
+
+func (m *Manager) RemoveNodeFromCopies(rpcCon string) {
+	index := -1
+	for i, node := range m.Copies {
+		if node.RPCcon == rpcCon {
+			index = i
+			break
+		}
+	}
+
+	if index != -1 {
+		m.Copies = append(m.Copies[:index], m.Copies[index+1:]...)
+	}
 }
