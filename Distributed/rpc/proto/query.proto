@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+option go_package = "./pb";
+
+service QueryService {
+  rpc ExecuteQuery(QueryRequest) returns (QueryResponse);
+}
+
+message QueryRequest {
+  string sql = 1;
+}
+
+message Row {
+  map<string, string> values = 1;
+}
+
+message QueryResponse {
+  repeated Row result = 1;
+  string message = 2;
+}

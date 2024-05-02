@@ -46,7 +46,7 @@ func (s *Server) Start() error {
 	}
 	defer ln.Close()
 
-	fmt.Println("TCP STARTED")
+	fmt.Println("TCP STARTED", s.address)
 	s.ln = ln
 	go s.acceptLoop()
 
@@ -87,6 +87,8 @@ func (s *Server) readLoop(conn net.Conn) {
 		}
 
 		switch msg.Type {
+		case "QUERY":
+			fmt.Println(msg, "QUERY QUERY")
 		case "HEARTBEAT":
 			s.HeartBeat(msg)
 		case "MANAGER UPDATE":
@@ -141,20 +143,15 @@ func (s *Server) IsLeaderAlive() {
 					}
 				case <-s.StopRoutine:
 					if s.Node.IsLeader {
-						fmt.Println("QUITTEDDDDDD")
 						return
 					}
 				}
 			}
 		}
 	}()
-
-	// Example usage to stop the goroutine after some time
-	// time.Sleep(10 * time.Minute)
-	// close(stop)
 }
 
-var activeNodes []string
+var activeNodesSet = make(map[string]string)
 
 func (s *Server) HeartBeat(msg m.Message) {
 	heartMap := msg.Content.(map[string]interface{})
@@ -163,10 +160,10 @@ func (s *Server) HeartBeat(msg m.Message) {
 	isLeader := s.Node.IsLeader
 
 	if isLeader {
-		activeNodes = append(activeNodes, heartCon)
-		fmt.Println(activeNodes, "ACTIVE NODES")
-		if len(activeNodes) == len(s.Manager.Copies) {
-			activeNodes = []string{}
+		activeNodesSet[heartCon] = heartCon
+		fmt.Println(activeNodesSet, "ACTIVE NODES")
+		if len(activeNodesSet) == len(s.Manager.Copies) {
+			activeNodesSet = map[string]string{}
 		}
 
 		return
@@ -233,6 +230,8 @@ func (s *Server) ElectLeader(msg m.Message) {
 			Type:    "MANAGER UPDATE",
 			Content: s.Manager,
 		}
+
+		m.SendMessage(node.ClientCon, msg)
 
 		for _, node := range s.Manager.Copies {
 			m.SendMessage(node.HeartCon, msg)

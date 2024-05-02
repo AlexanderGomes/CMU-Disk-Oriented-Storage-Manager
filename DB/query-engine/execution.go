@@ -14,7 +14,11 @@ type Query struct {
 	Message string
 }
 
-func ExecuteQueryPlan(qp ExecutionPlan, P *ParsedQuery, bpm *storage.BufferPoolManager) error {
+type QueryEngine struct {
+	DB *storage.BufferPoolManager
+}
+
+func (qe *QueryEngine) ExecuteQueryPlan(qp ExecutionPlan, P *ParsedQuery) (Query, error) {
 	query := Query{}
 	var page *storage.Page
 	keys := []string{}
@@ -23,23 +27,23 @@ func ExecuteQueryPlan(qp ExecutionPlan, P *ParsedQuery, bpm *storage.BufferPoolM
 	for _, steps := range qp.Steps {
 		switch steps.Operation {
 		case "GetTable":
-			page = GetTable(P, bpm, steps, &keys, &pageIds)
+			page = GetTable(P, qe.DB, steps, &keys, &pageIds)
 		case "GetAllColumns":
 			GetAllColumns(page, &query)
 		case "FilterByColumns":
 			FilterByColumns(page, &query, P)
 		case "InsertRows":
-			InsertRows(P, &query, bpm, page)
+			InsertRows(P, &query, qe.DB, page)
 		case "CreateTable":
-			CreateTable(P, &query, bpm)
+			CreateTable(P, &query, qe.DB)
 		case "JoinQueryTable":
 			JoinTables(&query, page, P.Joins[0].Condition)
 		}
 	}
 
-	FreePages(bpm, &pageIds)
+	FreePages(qe.DB, &pageIds)
 	FormatQueryResult(&query, &keys)
-	return nil
+	return query, nil
 }
 
 func FreePages(bpm *storage.BufferPoolManager, ids *[]storage.PageID) {
@@ -204,4 +208,20 @@ func hashTableName(tableName string) (uint64, error) {
 	hashValue := hasher.Sum64()
 
 	return hashValue, nil
+}
+
+func (qe *QueryEngine) ExecuteQuery(sql string) (Query, error) {
+	parsedSQL, err := Parser(sql)
+	if err != nil {
+		return Query{}, err
+	}
+
+	queryPlan, err := GenerateQueryPlan(parsedSQL)
+	if err != nil {
+		return Query{}, err
+	}
+
+	result, _ := qe.ExecuteQueryPlan(queryPlan, parsedSQL)
+
+	return result, nil
 }

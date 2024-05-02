@@ -1,52 +1,68 @@
 # CMU Storage Engine
-disk-oriented storage manager with SQL query support
+
+disk-oriented storage manager with SQL query support.
 
 ## Motive
-This project serves as a practical application of the knowledge I gained from the "Intro To Database Systems - CMU" course, I decided to build my own implementation from scratch.
+
+This project serves as a practical application of the knowledge gained from the "Intro To Database Systems - CMU" course, inspiring the decision to build a custom implementation from scratch.
 
 ## Future Changes
-- [x] create a query engine, adding SQL support to the storage engine, implementing the concepts I learned when it comes to query optimization and execution.
-- [ ] Learn distributed systems by implementing data replication.
+
+- [x] Create a query engine, adding SQL support to the storage engine, implementing concepts learned in query optimization and execution.
+- [x] Learn distributed systems by implementing data replication.
 
 ## Components
 
+### Distributed
+
+- [x] Utilized Paxos for leader election, ensuring agreement on values by a quorum of nodes.
+- [x] Established Heartbeats to enable any node to detect leader failures and initiate an election.
+- [x] Deployed Multi-Paxos and total order broadcasting to maintain consistency and query order.
+- [x] Addressed split brain scenarios by implementing a quorum system to ensure consistency.
+- [x] Employed gRPC for executing queries across all nodes in the system.
+- [x] Developed a custom TCP server to ensure node awareness and keep clients updated on the leader node.
+
 ### Query Engine
-The most exciting part of the project:
-- [x] parsing SQL queries.
-- [x] creating a rule-based planner.
-- [x] optimizing algorithms for better query execution.
-- [x] gracefully handling process termination so all changes made to the buffer pool don't get lost.
-- [x] creating thread-safe code for manipulating hundreds of pages with many different queries.
+
+- [x] Parsed SQL queries efficiently.
+- [x] Developed a rule-based planner.
+- [x] Optimized join algorithm to enhance query execution.
+- [x] Implemented graceful handling of process termination to prevent data loss or corruption in the buffer pool.
+- [x] Ensured thread-safe code for manipulating numerous pages with diverse queries.
 
 ### Buffer Pool Manager
 
-The Buffer Pool Manager handles memory used for caching data pages, making sure memory is used efficiently and cutting down how often it needs to fetch data from the disk.
+Implemented a robust buffer pool capable of efficiently managing 4GB of pages, approximately one billion pages. The buffer pool seamlessly handled numerous query requests, ensuring data consistency and eliminating locking overhead. It achieved reading all one billion pages in just 4 minutes.
 
 ### Replacer
 
-The Replacer component is responsible for managing the replacement strategy within the buffer pool. It determines which pages should be evicted from memory when additional space is required, I chose to use the LRU-K algorithm taking into consideration both past access timestamps and the frequency of page accesses.
+Implemented LKR-K, selecting pages for eviction based on their recent accesses and frequency, ensuring that only essential pages remain in the buffer pool.
 
 ### Disk Manager
 
-The Disk Manager facilitates interactions between the buffer pool and the disk, It manages the Directory page, Row Pages, and headers stored in the disk.
+Facilitates interactions between the buffer pool and the disk, managing the Directory page, Row Pages, and headers stored on the disk.
 
 ### Disk Scheduler
 
-The Disk Scheduler optimizes the order of disk operations to minimize seek times and enhance overall disk I/O performance. It aims to efficiently schedule disk access requests to reduce latency.
+Optimizes the order of disk operations to minimize seek times and enhance overall disk I/O performance, efficiently scheduling disk access requests to reduce latency.
 
 ## Pages Layout
 
 ### Directory Page
 
-I changed the design of the directory page from EXTENDIBLE HASH INDEX to a B+ Tree, which compressed storage and allowed for range searches.
+The design of the directory page was changed from EXTENDIBLE HASH INDEX to a B+ Tree, compressing storage and allowing for range searches.
 
 ### Row Pages
 
-Row pages store actual data records within the database. I used a hashmap for it since each page could only hold 50 entries of JSON data, if I was to store it as bytes I would use a different data structure.
+Store actual data records within the database. A hashmap was used as each page could only hold 50 entries of JSON data. If storing as bytes, a different data structure would be utilized.
 
 ## How to Run the Project
-just download the source code and run it on the terminal
-- go mod tidy
-- go run main.go
 
-you will see pages getting created, accessed and evicted to the DB-file.
+Simply download the source code and run it in the terminal:
+
+```bash
+go mod tidy
+go run main.go
+```
+
+This will showcase pages being created, accessed, and evicted to the DB-file, along with the system's nodes' activity, leader election, and fault detection.

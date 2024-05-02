@@ -1,7 +1,8 @@
 package main
 
 import (
-	queryengine "disk-db/DB/query-engine"
+	"disk-db/DB/cmd"
+	query "disk-db/DB/query-engine"
 	"disk-db/DB/storage"
 	m "disk-db/Distributed/manager"
 	"disk-db/Distributed/rpc"
@@ -15,6 +16,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"google.golang.org/grpc"
 )
@@ -27,9 +29,11 @@ const (
 func main() {
 	node := GetCommandLineInputs()
 	node.PID = os.Getpid()
+	fmt.Println(node.PID)
 
-	if node.IsLeader {
-		fmt.Println(node.PID)
+	queryEngine, err := cmd.InitDatabase(k, node.FileName, HeaderSize)
+	if err != nil {
+		fmt.Println("ERROR DATABASE: ", err)
 	}
 
 	s := tcp.NewServer(node.HeartCon, node)
@@ -44,7 +48,13 @@ func main() {
 
 	go func() {
 		defer wg.Done()
-		StartRpcServer(node.RPCcon)
+		for s.Manager == nil {
+			time.Sleep(1 * time.Second)
+			fmt.Println("NILL MANAGER")
+		}
+
+		fmt.Println("READY MANAGER")
+		go StartRpcServer(node.RPCcon, queryEngine, s.Manager)
 	}()
 
 	s.LeaderHeartbeat()
@@ -53,12 +63,13 @@ func main() {
 	wg.Wait()
 }
 
-func StartRpcServer(port string) {
+func StartRpcServer(port string, qe *query.QueryEngine, manager *m.Manager) {
 	println("Running RPC Server")
 	lis, _ := net.Listen("tcp", port)
 
 	s := grpc.NewServer()
-	pb.RegisterHelloServer(s, &rpc.RPCserver{})
+
+	pb.RegisterQueryServiceServer(s, &rpc.RPCServer{QueryEngine: qe, Manager: manager})
 
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("FAILED TO SERVER %v", err)
@@ -84,20 +95,6 @@ func GetCommandLineInputs() *m.Node {
 	}
 
 	return &node
-}
-
-func ExecuteQuery(sql string, DB *storage.BufferPoolManager) {
-	parsedSQL, err := queryengine.Parser(sql)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	queryPlan, err := queryengine.GenerateQueryPlan(parsedSQL)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	queryengine.ExecuteQueryPlan(queryPlan, parsedSQL, DB)
 }
 
 func gracefulShutdown(s chan os.Signal, DB *storage.BufferPoolManager) {

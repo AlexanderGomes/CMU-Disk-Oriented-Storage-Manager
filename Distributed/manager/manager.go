@@ -19,6 +19,7 @@ type Message struct {
 type Node struct {
 	RPCcon     string
 	HeartCon   string
+	ClientCon  string
 	PID        int
 	FileName   string
 	IsLeader   bool
@@ -55,16 +56,17 @@ func (m *Manager) StartElection(proposer *Node) {
 	}
 }
 
-func CreateNode(rpcCon string, heartCon string, file string, isLeader bool) *Node {
+func CreateNode(rpcCon string, heartCon string, clientCon string, file string, isLeader bool) *Node {
 	return &Node{
-		RPCcon:   rpcCon,
-		HeartCon: heartCon,
-		FileName: file,
-		IsLeader: isLeader,
+		RPCcon:    rpcCon,
+		HeartCon:  heartCon,
+		FileName:  file,
+		IsLeader:  isLeader,
+		ClientCon: clientCon,
 	}
 }
 
-func InitNodes(program string, nodesQty int, channel chan []byte) {
+func InitNodes(program string, nodesQty int, channel chan []byte, clientCon string) {
 	for i := 0; i < nodesQty; i++ {
 		go func(num int, channel chan []byte) {
 			filename := "DB-" + strconv.Itoa(num)
@@ -72,7 +74,7 @@ func InitNodes(program string, nodesQty int, channel chan []byte) {
 			heartCon := ":" + strconv.Itoa(10000+num)
 
 			isLeader := num == 1
-			node := CreateNode(rpcPort, heartCon, filename, isLeader)
+			node := CreateNode(rpcPort, heartCon, clientCon, filename, isLeader)
 
 			nodeJSON, err := json.Marshal(node)
 			if err != nil {
