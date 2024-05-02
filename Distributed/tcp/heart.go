@@ -8,21 +8,34 @@ import (
 	"io"
 	"math"
 	"net"
+	"time"
+)
+
+const (
+	beatInterval = 3
 )
 
 type Server struct {
-	address string
-	ln      net.Listener
-	quitch  chan struct{}
-	Manager *m.Manager
-	Node    *m.Node
+	address     string
+	ln          net.Listener
+	quitch      chan struct{}
+	Manager     *m.Manager
+	Node        *m.Node
+	LastBeat    time.Time
+	StopRoutine chan bool
+}
+
+type HeartBeat struct {
+	TimeStamp time.Time
+	HeartCon  string
 }
 
 func NewServer(address string, node *m.Node) *Server {
 	return &Server{
-		address: address,
-		quitch:  make(chan struct{}),
-		Node:    node,
+		address:     address,
+		quitch:      make(chan struct{}),
+		Node:        node,
+		StopRoutine: make(chan bool),
 	}
 }
 
@@ -75,20 +88,106 @@ func (s *Server) readLoop(conn net.Conn) {
 
 		switch msg.Type {
 		case "HEARTBEAT":
-
+			s.HeartBeat(msg)
 		case "MANAGER UPDATE":
 			s.SetManager(msg)
 		case "PREPARE":
-			s.ElectionPrepare(msg)
+			s.Promise(msg)
 		case "PROMISE":
-			s.ElectionPromisse(msg)
+			s.ElectLeader(msg)
 		}
 	}
 }
 
+func (s *Server) LeaderHeartbeat() {
+	if s.Node.IsLeader {
+		go func() {
+			ticker := time.Tick(beatInterval * time.Second)
+			for range ticker {
+				message := m.Message{
+					Type: "HEARTBEAT",
+					Content: HeartBeat{
+						HeartCon:  s.Node.HeartCon,
+						TimeStamp: time.Now(),
+					},
+				}
+
+				for _, node := range s.Manager.Copies {
+					m.SendMessage(node.HeartCon, message)
+				}
+			}
+		}()
+	}
+}
+
+func (s *Server) IsLeaderAlive() {
+	go func() {
+		if !s.Node.IsLeader {
+			ticker := time.NewTicker(beatInterval * time.Second)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ticker.C:
+					elapsedTime := int(time.Since(s.LastBeat) / time.Second)
+					aboveTolerance := elapsedTime > beatInterval*3
+					fmt.Println("ELAPSED TIME", elapsedTime)
+
+					if aboveTolerance {
+						fmt.Println("ELECTION STARTED")
+						s.Manager.StartElection(s.Node)
+					} else {
+						fmt.Println("EVERYTHING IS FINE")
+					}
+				case <-s.StopRoutine:
+					if s.Node.IsLeader {
+						fmt.Println("QUITTEDDDDDD")
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	// Example usage to stop the goroutine after some time
+	// time.Sleep(10 * time.Minute)
+	// close(stop)
+}
+
+var activeNodes []string
+
+func (s *Server) HeartBeat(msg m.Message) {
+	heartMap := msg.Content.(map[string]interface{})
+	heartCon := getStringValue(heartMap["HeartCon"])
+	timeStamp, _ := parseTimeStamp(heartMap["TimeStamp"])
+	isLeader := s.Node.IsLeader
+
+	if isLeader {
+		activeNodes = append(activeNodes, heartCon)
+		fmt.Println(activeNodes, "ACTIVE NODES")
+		if len(activeNodes) == len(s.Manager.Copies) {
+			activeNodes = []string{}
+		}
+
+		return
+	}
+
+	message := m.Message{
+		Type: "HEARTBEAT",
+		Content: HeartBeat{
+			HeartCon:  s.Node.HeartCon,
+			TimeStamp: time.Now(),
+		},
+	}
+
+	m.SendMessage(heartCon, message)
+
+	s.LastBeat = timeStamp
+}
+
 var LastProposalID int = math.MaxInt64
 
-func (s *Server) ElectionPrepare(msg m.Message) {
+func (s *Server) Promise(msg m.Message) {
 	prepareMap := msg.Content.(map[string]interface{})
 	proposalID := getIntValue(prepareMap["ProposalID"])
 	heartCon := getStringValue(prepareMap["HeartCon"])
@@ -112,7 +211,7 @@ func (s *Server) ElectionPrepare(msg m.Message) {
 	m.SendMessage(heartCon, res)
 }
 
-func (s *Server) ElectionPromisse(msg m.Message) {
+func (s *Server) ElectLeader(msg m.Message) {
 	promisseMap, ok := msg.Content.(map[string]interface{})
 	if !ok {
 		fmt.Println("promisseMap error")
@@ -128,6 +227,7 @@ func (s *Server) ElectionPromisse(msg m.Message) {
 	if quorumQty == acceptorsQty {
 		s.Manager.RemoveNodeFromCopies(s.Node.RPCcon)
 		s.Manager.Leader = s.Node
+		s.Node.IsLeader = true
 
 		msg := m.Message{
 			Type:    "MANAGER UPDATE",
@@ -137,7 +237,12 @@ func (s *Server) ElectionPromisse(msg m.Message) {
 		for _, node := range s.Manager.Copies {
 			m.SendMessage(node.HeartCon, msg)
 		}
+
 		LastProposalID = math.MaxInt64
+		s.Manager.Acceptors = []*m.Node{}
+
+		s.LeaderHeartbeat()
+		s.StopRoutine <- true
 	}
 }
 
@@ -218,4 +323,12 @@ func getIntValue(value interface{}) int {
 		return int(f)
 	}
 	return 0
+}
+
+func parseTimeStamp(timeStr interface{}) (time.Time, error) {
+	timeStamp, err := time.Parse(time.RFC3339, timeStr.(string))
+	if err != nil {
+		return time.Time{}, err
+	}
+	return timeStamp, nil
 }

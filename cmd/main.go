@@ -9,14 +9,14 @@ import (
 	"disk-db/Distributed/tcp"
 	"encoding/json"
 	"fmt"
-	"google.golang.org/grpc"
 	"log"
 	"net"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
-	"time"
+
+	"google.golang.org/grpc"
 )
 
 const (
@@ -26,10 +26,17 @@ const (
 
 func main() {
 	node := GetCommandLineInputs()
+	node.PID = os.Getpid()
+
+	if node.IsLeader {
+		fmt.Println(node.PID)
+	}
+
 	s := tcp.NewServer(node.HeartCon, node)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
+
 	go func() {
 		defer wg.Done()
 		s.Start()
@@ -40,15 +47,10 @@ func main() {
 		StartRpcServer(node.RPCcon)
 	}()
 
-	time.Sleep(10 * time.Second)
-	s.Manager.StartElection(s.Node)
-	wg.Wait()
-}
+	s.LeaderHeartbeat()
+	s.IsLeaderAlive()
 
-func Test(m *m.Manager) {
-	time.Sleep(10 * time.Second)
-	fmt.Println(m.Copies, "COPIES")
-	fmt.Println(m.Leader, "LEADER")
+	wg.Wait()
 }
 
 func StartRpcServer(port string) {

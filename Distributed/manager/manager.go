@@ -42,15 +42,6 @@ type Promise struct {
 	Acceptor     *Node
 }
 
-type Propose struct {
-	Type       string
-	ProposalID int
-	Value      *Node
-}
-
-type Acceptance struct {
-}
-
 func (m *Manager) StartElection(proposer *Node) {
 	quorum := len(m.Copies)/2 + 1
 	proposalID := int(time.Now().UnixNano())
@@ -77,8 +68,8 @@ func InitNodes(program string, nodesQty int, channel chan []byte) {
 	for i := 0; i < nodesQty; i++ {
 		go func(num int, channel chan []byte) {
 			filename := "DB-" + strconv.Itoa(num)
-			rpcPort := ":" + strconv.Itoa(4000+num)
-			heartCon := ":" + strconv.Itoa(9000+num)
+			rpcPort := ":" + strconv.Itoa(11000+num)
+			heartCon := ":" + strconv.Itoa(10000+num)
 
 			isLeader := num == 1
 			node := CreateNode(rpcPort, heartCon, filename, isLeader)
