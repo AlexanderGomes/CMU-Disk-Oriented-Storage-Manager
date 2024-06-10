@@ -1,6 +1,22 @@
 # CMU Storage Engine
 
-disk-oriented storage manager with SQL query support.
+A disk-oriented storage manager with SQL query support.
+
+## Table of Contents
+
+1. [Motive](#motive)
+2. [Future Changes](#future-changes)
+3. [Components](#components)
+   - [Distributed](#distributed)
+   - [Query Engine](#query-engine)
+   - [Buffer Pool Manager](#buffer-pool-manager)
+   - [Replacer](#replacer)
+   - [Disk Manager](#disk-manager)
+   - [Disk Scheduler](#disk-scheduler)
+4. [Pages Layout](#pages-layout)
+   - [Directory Page](#directory-page)
+   - [Row Pages](#row-pages)
+5. [How to Run the Project](#how-to-run-the-project)
 
 ## Motive
 
@@ -15,20 +31,20 @@ This project serves as a practical application of the knowledge gained from the 
 
 ### Distributed
 
-- [x] Utilized Paxos for leader election, ensuring agreement on values by a quorum of nodes.
-- [x] Established Heartbeats to enable any node to detect leader failures and initiate an election.
-- [x] Deployed Multi-Paxos and total order broadcasting to maintain consistency and query order.
-- [x] Addressed split brain scenarios by implementing a quorum system to ensure consistency.
-- [x] Employed gRPC for executing queries across all nodes in the system.
-- [x] Developed a custom TCP server to ensure node awareness and keep clients updated on the leader node.
+- **Paxos for Leader Election**: Utilized Paxos for leader election, ensuring agreement on values by a quorum of nodes.
+- **Heartbeats**: Established Heartbeats to enable any node to detect leader failures and initiate an election.
+- **Multi-Paxos and Total Order Broadcasting**: Deployed Multi-Paxos and total order broadcasting to maintain consistency and query order.
+- **Split Brain Scenarios**: Addressed split brain scenarios by implementing a quorum system to ensure consistency.
+- **gRPC**: Employed gRPC for executing queries across all nodes in the system.
+- **Custom TCP Server**: Developed a custom TCP server to ensure node awareness and keep clients updated on the leader node.
 
 ### Query Engine
 
-- [x] Parsed SQL queries efficiently.
-- [x] Developed a rule-based planner.
-- [x] Optimized join algorithm to enhance query execution.
-- [x] Implemented graceful handling of process termination to prevent data loss or corruption in the buffer pool.
-- [x] Ensured thread-safe code for manipulating numerous pages with diverse queries.
+- **SQL Parsing**: Parsed SQL queries efficiently.
+- **Rule-based Planner**: Developed a rule-based planner.
+- **Join Algorithm Optimization**: Optimized join algorithm to enhance query execution.
+- **Graceful Termination Handling**: Implemented graceful handling of process termination to prevent data loss or corruption in the buffer pool.
+- **Thread-safe Code**: Ensured thread-safe code for manipulating numerous pages with diverse queries.
 
 ### Buffer Pool Manager
 
@@ -36,7 +52,7 @@ Implemented a robust buffer pool capable of efficiently managing 4GB of pages, a
 
 ### Replacer
 
-Implemented LKR-K, selecting pages for eviction based on their recent accesses and frequency, ensuring that only essential pages remain in the buffer pool.
+Implemented LRU-K, selecting pages for eviction based on their recent accesses and frequency, ensuring that only essential pages remain in the buffer pool.
 
 ### Disk Manager
 
